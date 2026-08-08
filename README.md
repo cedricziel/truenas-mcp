@@ -3,9 +3,8 @@
 An MCP server for TrueNAS SCALE. Read-first, deployable as a TrueNAS app, and
 authenticated with each user's own API key.
 
-> **Status: early but complete in shape.** Every capability in the design is
-> implemented; expect rough edges rather than gaps. See
-> [Current state](#current-state).
+> **Status: working, young.** Every capability in the design is implemented and
+> verified against a live TrueNAS 26 box. Expect rough edges rather than gaps.
 
 ## Why this exists
 
@@ -125,7 +124,13 @@ Working:
 - JSON-RPC middleware client: concurrent calls on one connection, structured
   errors distinguishing unreachable / unauthenticated / unauthorized / rate
   limited, and interrupted requests reported as *may have been applied*
+- Session reconnection when a connection dies, and refusal to run against a
+  release older than 25.04
 - Container image, CI, GHCR publication, TrueNAS app deployment
+
+**Not implemented:** job progress via resource *subscription*. Polling covers
+the same ground and is the path the design treats as reliable — subscription
+was always an enhancement over it, and MCP client support for it is thin.
 
 ### Tools
 
