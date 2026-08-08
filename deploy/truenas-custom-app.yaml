@@ -22,6 +22,19 @@ services:
       # The TrueNAS instance to manage. Reached over the network, not a socket.
       TRUENAS_MCP_TARGET: "192.168.178.6"
 
+      # Accept the target's certificate without verifying it.
+      #
+      # TrueNAS ships a self-signed certificate issued for CN=localhost with
+      # only DNS:localhost as a SAN, so no address or hostname the container
+      # can reach will ever validate. Replace the certificate on the target
+      # and remove this to get a verified connection.
+      #
+      # Note that this is NOT the same as falling back to plaintext: the
+      # connection stays encrypted, it is merely unauthenticated, and the API
+      # key is never sent in the clear. That distinction is why certificate
+      # verification and transport scheme are separate settings.
+      TRUENAS_MCP_TARGET_INSECURE: "true"
+
       # Serve MCP without TLS.
       #
       # This is only acceptable while the server exposes nothing but a health

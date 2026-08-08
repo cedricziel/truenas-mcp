@@ -39,20 +39,20 @@ Per design D15, the delivery pipeline is exercised before any feature work. The 
 - [ ] 3.9 Write failing tests for reconnection, backoff, and in-flight request interruption reporting
 - [ ] 3.10 Implement reconnection with backoff and interrupted-request error reporting
 - [x] 3.11 Implement structured connection errors distinguishing unreachable, unauthenticated, and unauthorized
-- [ ] 3.12 Write failing tests for per-session connection isolation: no sharing across credentials, no unauthenticated connection path, no session-supplied target override
-- [ ] 3.13 Implement per-session connection lifecycle with establish-once reuse and release on session close
+- [x] 3.12 Write failing tests for per-session connection isolation: no sharing across credentials, no unauthenticated connection path, no session-supplied target override
+- [x] 3.13 Implement per-session connection lifecycle with establish-once reuse and release on session close
 - [x] 3.14 Verify the connection layer against the live box, including a forced disconnect and two concurrent differently-privileged sessions
 - [ ] 3.15 Verify on the live box whether the target revokes API keys sent over a plaintext loopback connection, per design D11c
 
 ## 4. MCP transport and session authentication
 
-- [ ] 4.1 Write failing tests asserting the server holds no TrueNAS credential and refuses sessions that supply none
+- [x] 4.1 Write failing tests asserting the server holds no TrueNAS credential and refuses sessions that supply none
 - [x] 4.2 Implement the HTTP transport with a configurable bind address and port
-- [ ] 4.3 Implement per-session credential extraction and middleware session establishment under the caller's identity
+- [x] 4.3 Implement per-session credential extraction and middleware session establishment under the caller's identity
 - [ ] 4.4 Write failing tests for TLS enforcement on the MCP boundary and the explicit plaintext override with its warning
 - [ ] 4.5 Implement TLS enforcement on the MCP boundary
-- [ ] 4.6 Write failing tests asserting a session cannot exceed its own credential's privileges and that no call is retried under another credential
-- [ ] 4.7 Implement authorization failure reporting and mid-session revocation handling
+- [x] 4.6 Write failing tests asserting a session cannot exceed its own credential's privileges and that no call is retried under another credential
+- [x] 4.7 Implement authorization failure reporting and mid-session revocation handling
 - [ ] 4.8 Verify against the live box with two TrueNAS users of differing privilege that each session sees only what its user may see
 
 ## 5. Shared read layer
@@ -143,7 +143,7 @@ The image and pipeline already exist from group 2. This group installs it as a T
 - [ ] 12.2 Extend the health signal to reflect target reachability
 - [x] 12.3 Author the TrueNAS custom-app Compose definition with a top-level `services` key, mounting no host socket and requesting no privileged access
 - [x] 12.4 Install the Compose definition on the live TrueNAS instance through Apps → Install via YAML and verify the server is reachable from another machine
-- [ ] 12.5 Connect a real MCP client to the deployed container over TLS and verify an end-to-end tool call
+- [x] 12.5 Connect a real MCP client to the deployed container over TLS and verify an end-to-end tool call
 - [ ] 12.6 Verify the app survives a restart and an image tag update
 
 ## 13. Ship
