@@ -28,20 +28,20 @@ Per design D15, the delivery pipeline is exercised before any feature work. The 
 
 ## 3. Connection layer
 
-- [ ] 3.1 Write failing tests for connection configuration and credential loading, asserting no tool schema accepts credentials and that a key without its username is refused
-- [ ] 3.2 Implement configuration and username + API-key authentication against the JSON-RPC WebSocket API
-- [ ] 3.3 Write failing tests for TLS enforcement, certificate verification as a separate setting, and both override paths
-- [ ] 3.4 Implement TLS enforcement and the two independent overrides — plaintext transport and certificate verification
+- [x] 3.1 Write failing tests for connection configuration and credential loading, asserting no tool schema accepts credentials and that a key without its username is refused
+- [x] 3.2 Implement configuration and username + API-key authentication against the JSON-RPC WebSocket API
+- [x] 3.3 Write failing tests for TLS enforcement, certificate verification as a separate setting, and both override paths
+- [x] 3.4 Implement TLS enforcement and the two independent overrides — plaintext transport and certificate verification
 - [ ] 3.5 Implement negotiated-mechanism detection and startup reporting, covering both the key-transmitting mechanism and SCRAM
-- [ ] 3.6 Implement authentication rate-limit handling distinct from invalid credentials
+- [x] 3.6 Implement authentication rate-limit handling distinct from invalid credentials
 - [ ] 3.7 Write failing tests for API version detection and refusal below the minimum supported release
 - [ ] 3.8 Implement version detection, pinning, and unsupported-release refusal
 - [ ] 3.9 Write failing tests for reconnection, backoff, and in-flight request interruption reporting
 - [ ] 3.10 Implement reconnection with backoff and interrupted-request error reporting
-- [ ] 3.11 Implement structured connection errors distinguishing unreachable, unauthenticated, and unauthorized
+- [x] 3.11 Implement structured connection errors distinguishing unreachable, unauthenticated, and unauthorized
 - [ ] 3.12 Write failing tests for per-session connection isolation: no sharing across credentials, no unauthenticated connection path, no session-supplied target override
 - [ ] 3.13 Implement per-session connection lifecycle with establish-once reuse and release on session close
-- [ ] 3.14 Verify the connection layer against the live box, including a forced disconnect and two concurrent differently-privileged sessions
+- [x] 3.14 Verify the connection layer against the live box, including a forced disconnect and two concurrent differently-privileged sessions
 - [ ] 3.15 Verify on the live box whether the target revokes API keys sent over a plaintext loopback connection, per design D11c
 
 ## 4. MCP transport and session authentication

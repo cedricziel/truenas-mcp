@@ -21,26 +21,32 @@ The server SHALL connect to the target TrueNAS SCALE instance using the JSON-RPC
 - **AND** every tool call returns a structured error identifying the connection failure and the target host
 - **AND** the error distinguishes an unreachable host from an authentication failure
 
-### Requirement: Authenticate each connection with a username and a user-linked API key
+### Requirement: Authenticate each connection with a user-linked API key
 
-The server SHALL authenticate to the middleware using a username together with that user's API key, via the middleware's API-key login method. The credential SHALL be the one supplied by the MCP session on whose behalf the connection is opened, and SHALL NOT be accepted as a tool argument.
+The server SHALL authenticate to the middleware with a user-linked API key. TrueNAS API keys are bound to a user account, so the key alone identifies the caller and no separate username is required or accepted. The credential SHALL be the one supplied by the MCP session on whose behalf the connection is opened, and SHALL NOT be accepted as a tool argument.
 
-#### Scenario: Valid credentials
+#### Scenario: Valid credential
 
-- **WHEN** the server authenticates with a username and a valid API key for that user
+- **WHEN** the server authenticates with a valid API key
 - **THEN** authentication succeeds and the connection is established for that session
-
-#### Scenario: Username missing from the supplied credential
-
-- **WHEN** an API key is supplied without an accompanying username
-- **THEN** the server refuses to open the connection
-- **AND** it reports that the API-key login requires the owning username
+- **AND** the identity the target associates with the key becomes the session's identity
 
 #### Scenario: Invalid or revoked API key
 
-- **WHEN** the credentials are rejected by the target
+- **WHEN** the credential is rejected by the target
 - **THEN** the server returns a structured error identifying authentication as the cause
 - **AND** the error does not include the API key value
+
+#### Scenario: Expired API key
+
+- **WHEN** the target reports the credential as expired rather than invalid
+- **THEN** the server distinguishes expiry from rejection in the error it returns
+
+#### Scenario: A second authentication factor is required
+
+- **WHEN** the target reports that a one-time password is required to complete login
+- **THEN** the server reports that the credential cannot complete authentication unattended
+- **AND** it does not leave the connection in a half-authenticated state
 
 #### Scenario: Authentication rate limit reached
 
