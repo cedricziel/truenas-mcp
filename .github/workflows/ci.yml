@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
 
 env:
@@ -39,8 +38,8 @@ jobs:
 
       - run: go test -race ./...
 
-  # Publication is gated on test: a commit that fails tests or lint
-  # produces no image.
+  # Publishes the moving `main` tag only. Versioned releases are cut by
+  # release-please.yml, which is the single path to a release.
   publish:
     needs: test
     if: github.event_name == 'push'
@@ -63,11 +62,10 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          # Moving tag on the default branch, immutable tags on releases.
+          # Moving tag plus an immutable per-commit tag. Semver tags belong
+          # to release-please.yml.
           tags: |
             type=raw,value=main,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=sha,format=long
 
       - uses: docker/build-push-action@v7
