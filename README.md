@@ -74,6 +74,38 @@ docker run -p 8080:8080 \
   ghcr.io/cedricziel/truenas-mcp:main
 ```
 
+### Running the binary
+
+Each [GitHub release](https://github.com/cedricziel/truenas-mcp/releases)
+attaches binaries for Linux, macOS, and Windows on amd64 and arm64, alongside a
+`checksums.txt`. Configuration is environment variables only — there is no
+config file and no flag beyond `--healthcheck`.
+
+The binary is an HTTP server, not a stdio MCP server. Running it does not make
+a client pick it up on its own; it listens on a port, and the client connects
+to it by URL:
+
+```bash
+TRUENAS_MCP_TARGET=nas.local \
+TRUENAS_MCP_LISTEN=127.0.0.1:8080 \
+TRUENAS_MCP_TARGET_INSECURE=true \
+TRUENAS_MCP_ALLOW_PLAINTEXT=true \
+./truenas-mcp
+```
+
+Point the client at `http://localhost:8080/mcp`, with the TrueNAS API key sent
+as an `Authorization: Bearer` header, the same as in
+[Connecting a client](#connecting-a-client).
+
+`TRUENAS_MCP_TARGET_INSECURE` is typically needed for the reason given in
+[On the two TLS settings](#on-the-two-tls-settings): TrueNAS ships a
+self-signed certificate for `CN=localhost` that will not validate against any
+other address. `TRUENAS_MCP_ALLOW_PLAINTEXT` is defensible here specifically
+because `TRUENAS_MCP_LISTEN` binds the listener to loopback — reachable only
+from the same machine — which is the condition that section argues plaintext
+requires. The default bind address is `:8080`, which is every interface, so
+dropping that setting while keeping plaintext would put API keys on the wire.
+
 ## Configuration
 
 All configuration is environment variables; no config file or persistent volume
@@ -292,6 +324,9 @@ push to main ──▶ ci.yml        test, lint, publish :main and :sha-<commit>
 without a release. The release job re-runs the tests against the tagged commit
 before publishing — the tag is a different commit from the one CI last checked,
 and a release is only as trustworthy as the tests that gated it.
+
+Each release also attaches binaries for Linux, macOS, and Windows and a
+`checksums.txt`, alongside the container image.
 
 **Token.** Set a `RELEASE_PLEASE_TOKEN` repository secret to a PAT with
 `contents: write` and `pull-requests: write`. Without it the workflow falls back
