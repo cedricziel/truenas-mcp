@@ -1,0 +1,4 @@
+/dist/
+/truenas-mcp
+*.pem
+.env
