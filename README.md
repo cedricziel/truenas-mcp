@@ -27,6 +27,10 @@ Three ideas do most of the work.
 key; this server stores none. A session reaches exactly what that user's key
 permits, revocation happens in the TrueNAS UI, and there is no shared secret to
 leak. Authentication and authorization stop being two systems that can disagree.
+Served over stdio the key arrives from the environment instead, because there is
+no request to carry it — but the client spawns one process per user, so it is
+still that user's own key. What the design rules out is one key standing in for
+many callers, not configuration as such.
 
 **Reads and writes get different tool shapes.** Reads are grouped into
 concern-level tools with an `op` enum, because they share most of their
@@ -79,11 +83,12 @@ docker run -p 8080:8080 \
 Each [GitHub release](https://github.com/cedricziel/truenas-mcp/releases)
 attaches binaries for Linux, macOS, and Windows on amd64 and arm64, alongside a
 `checksums.txt`. Configuration is environment variables only — there is no
-config file and no flag beyond `--healthcheck`.
+config file, and the only flags are `--stdio` and `--healthcheck`.
 
-The binary is an HTTP server, not a stdio MCP server. Running it does not make
-a client pick it up on its own; it listens on a port, and the client connects
-to it by URL:
+By default the binary is an HTTP server. Running it does not make a client pick
+it up on its own; it listens on a port, and the client connects to it by URL.
+For clients that spawn the server themselves, see
+[Serving over stdio](#serving-over-stdio) below.
 
 ```bash
 TRUENAS_MCP_TARGET=nas.local \
@@ -106,6 +111,36 @@ from the same machine — which is the condition that section argues plaintext
 requires. The default bind address is `:8080`, which is every interface, so
 dropping that setting while keeping plaintext would put API keys on the wire.
 
+### Serving over stdio
+
+Some clients spawn a server as a subprocess and talk to it over its standard
+input and output rather than connecting to a URL. `--stdio` serves the same
+tools that way.
+
+```bash
+claude mcp add --scope user truenas \
+  --env TRUENAS_MCP_TARGET=nas.local \
+  --env TRUENAS_MCP_TARGET_INSECURE=true \
+  --env TRUENAS_MCP_API_KEY=$YOUR_TRUENAS_API_KEY \
+  -- /path/to/truenas-mcp --stdio
+```
+
+There is no request to carry a header here, so the key comes from
+`TRUENAS_MCP_API_KEY` instead. That is not the shared secret the HTTP transport
+avoids: the client spawns one process per user, so the key it passes is that
+user's own, and the process reaches exactly what that key permits. The same
+variable is refused in HTTP mode, where one process serves many callers and a
+configured key would be shared by all of them.
+
+Nothing about the listener applies. `TRUENAS_MCP_LISTEN`, the two TLS settings
+and `TRUENAS_MCP_ALLOW_PLAINTEXT` are ignored with a warning rather than an
+error, since none of them weakens anything when no listener exists.
+`--healthcheck` is refused alongside `--stdio`, because it probes a listener
+that was never started.
+
+Settings that concern the target rather than the listener still apply, including
+`TRUENAS_MCP_TARGET_INSECURE` and `TRUENAS_MCP_ENABLE_WRITES`.
+
 ## Configuration
 
 All configuration is environment variables; no config file or persistent volume
@@ -120,8 +155,13 @@ is needed. Invalid configuration refuses to start rather than running degraded.
 | `TRUENAS_MCP_TARGET_INSECURE` | `false` | Accept the target's certificate unverified |
 | `TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT` | `false` | Connect to the target without TLS |
 | `TRUENAS_MCP_ENABLE_WRITES` | `false` | Expose mutating tools |
+| `TRUENAS_MCP_API_KEY` | — | Credential for `--stdio`; refused otherwise |
 
-**No credential is configurable here.** Callers supply their own.
+**No credential is configurable for the HTTP transport.** Callers supply their
+own with each request, and setting `TRUENAS_MCP_API_KEY` without `--stdio` is a
+startup error rather than a silent fallback. Over stdio there is no request to
+carry one and the process serves a single user, so the variable is how that
+user's key arrives — see [Serving over stdio](#serving-over-stdio).
 
 ### On the two TLS settings
 
@@ -148,11 +188,16 @@ claude mcp add --scope user --transport http truenas \
 The key may also be sent as `X-TrueNAS-API-Key`, for clients that cannot set an
 `Authorization` header. Requests without either are refused with `401`.
 
+Clients that spawn the server rather than connect to one want
+[Serving over stdio](#serving-over-stdio) instead.
+
 ## Current state
 
 Working:
 
 - Streamable HTTP transport, per-session credentials, `401` without one
+- Stdio transport under a single per-process credential, for clients that spawn
+  the server rather than connect to one
 - JSON-RPC middleware client: concurrent calls on one connection, structured
   errors distinguishing unreachable / unauthenticated / unauthorized / rate
   limited, and interrupted requests reported as *may have been applied*
