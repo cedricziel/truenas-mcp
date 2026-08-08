@@ -134,6 +134,18 @@ func Apps() *Concern {
 				Summary: "host ports already taken, useful before exposing a new app",
 				Method:  "app.used_ports",
 			},
+			// The closest the middleware gets to logs. TrueNAS 26 exposes no
+			// JSON-RPC method returning container log output -- the web UI
+			// streams it over a separate channel -- so this returns the
+			// container identities a log transport would need, and is useful
+			// on its own for "which containers does this app actually run".
+			{
+				Name:     "containers",
+				Summary:  "the containers an app runs, with their service names and IDs",
+				Method:   "app.container_ids",
+				Args:     []string{"name"},
+				Required: []string{"name"},
+			},
 		},
 	}
 }
