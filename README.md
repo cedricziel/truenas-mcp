@@ -134,6 +134,9 @@ Working:
 | `system` | `info`, `alerts`, `list_services`, `update_status` |
 | `apps` | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
 | `jobs` | `list`, `show` |
+| `search_methods` | find middleware methods by name |
+| `describe_method` | a method's arguments, summarised |
+| `call_method` | invoke a method directly |
 | `server_info` | — |
 | `system_info` | — |
 
@@ -179,7 +182,29 @@ log output — the web UI streams it over a separate channel. `apps containers`
 returns the container identities such a transport would need, and is useful on
 its own. Log streaming is tracked as future work.
 
-Not yet built: method discovery and MCP resources.
+### The discovery escape hatch
+
+The middleware has 815 methods across 74 namespaces. Most will never justify a
+dedicated tool, so `search_methods` / `describe_method` / `call_method` cover
+the tail without a code change per release.
+
+They are bounded by an **allowlist of method shapes**, not a denylist. An
+allowlist fails closed: a method invented in a future TrueNAS release is
+unreachable until someone decides otherwise. A denylist maintained against an
+API that grows every six months fails open, which is the wrong default for a
+box holding the only copy of your data.
+
+Write-shaped methods are checked before read-shaped ones, because some mutating
+names also read as reads — `app.pull_images` ends in `_images` — and when the
+classifications overlap the safer one has to win.
+
+`describe_method` summarises rather than dumps. Measured on a live target,
+`sharing.smb.create`'s schema is ~31,000 characters and
+`directoryservices.update`'s ~53,000; models also fill large sparse schemas
+less accurately than small dense ones, so a faithful dump costs more and works
+worse. Pass `full=true` when you really want it.
+
+Not yet built: MCP resources.
 
 ## Development
 
