@@ -115,6 +115,38 @@ func TestAppsExposesLifecycleReads(t *testing.T) {
 	}
 }
 
+// The correlation between a container's tag and an image's digest, and the
+// choice between this op and outdated_images, have to live in the Summary
+// itself -- that is the only thing a model reads before picking an op.
+func TestAppsExposesImageDigests(t *testing.T) {
+	images := findOp(Apps(), "images")
+	if images == nil {
+		t.Fatal(`apps concern must expose an "images" op resolving what a container actually runs`)
+	}
+	if images.Method != "app.image.query" {
+		t.Errorf("images op method = %q, want app.image.query", images.Method)
+	}
+	if len(images.Required) != 0 {
+		t.Errorf("images op requires %v, but app.image.query takes no name filter", images.Required)
+	}
+
+	for _, term := range []string{"repo_tags", "update_available", "outdated_images"} {
+		if !strings.Contains(images.Summary, term) {
+			t.Errorf("images op summary must mention %q so the correlation is discoverable, got: %s", term, images.Summary)
+		}
+	}
+
+	want := map[string]bool{"id": true, "repo_tags": true, "repo_digests": true, "update_available": true}
+	if len(images.Project) != len(want) {
+		t.Fatalf("images op projects %v, want exactly %d fields", images.Project, len(want))
+	}
+	for _, f := range images.Project {
+		if !want[f] {
+			t.Errorf("images op projects unexpected field %q", f)
+		}
+	}
+}
+
 func findOp(c *Concern, name string) *Op {
 	for i := range c.Ops {
 		if c.Ops[i].Name == name {

@@ -171,6 +171,26 @@ func Apps() *Concern {
 				Args:     []string{"name"},
 				Required: []string{"name"},
 			},
+			// A moving tag such as :main says nothing about identity, which is
+			// what leaves a caller unable to prove which build is running after
+			// a deploy. app.image.query is global rather than per-app and takes
+			// no name filter, so this op takes no argument; a caller matches a
+			// tag from the containers op against repo_tags, and locally only
+			// one image holds a given tag at a time, so that match is exact.
+			{
+				Name: "images",
+				Summary: "every image's digest and tags, plus a per-image update_available boolean; " +
+					"match a tag from containers against repo_tags to learn exactly which image " +
+					"a running container executes. Prefer update_available here over " +
+					"outdated_images, whose empty result cannot distinguish \"nothing outdated\" " +
+					"from \"could not tell\"",
+				Method: "app.image.query",
+				// Identity and staleness are the whole question here. The rest
+				// is build metadata -- author, comment, created, dangling --
+				// which is noise against a collection that grows with every
+				// image ever pulled. full=true still yields it.
+				Project: []string{"id", "repo_tags", "repo_digests", "update_available"},
+			},
 		},
 	}
 }
