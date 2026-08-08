@@ -80,3 +80,43 @@ func TestRecursiveDatasetDeletionIsDenied(t *testing.T) {
 		t.Error("recursive dataset deletion must be denied")
 	}
 }
+
+// Configuring one path's ACL is the useful thing an assistant should do.
+// Applying it recursively is not: it walks an entire dataset, its blast radius
+// is unbounded, and undoing it requires knowing what every child ACL was.
+func TestRecursiveACLApplicationIsDenied(t *testing.T) {
+	if err := CheckDenied("filesystem.setacl", map[string]any{"recursive": true}); err == nil {
+		t.Error("recursive ACL application must be denied")
+	}
+	if err := CheckDenied("filesystem.setacl", map[string]any{"traverse": true}); err == nil {
+		t.Error("crossing filesystem boundaries during an ACL change must be denied")
+	}
+	// stripacl discards the existing ACL rather than editing it.
+	if err := CheckDenied("filesystem.setacl", map[string]any{"stripacl": true}); err == nil {
+		t.Error("stripping an ACL must be denied")
+	}
+}
+
+// The same method in its useful form stays available: this is the whole point
+// of gating arguments rather than method names.
+func TestSettingOneACLIsAllowed(t *testing.T) {
+	if err := CheckDenied("filesystem.setacl", map[string]any{"path": "/mnt/tank/media"}); err != nil {
+		t.Errorf("setting one path's ACL must remain possible: %v", err)
+	}
+	if err := CheckDenied("filesystem.setacl", map[string]any{"recursive": false}); err != nil {
+		t.Errorf("explicitly declining recursion is not destruction: %v", err)
+	}
+}
+
+// Share configuration is exactly the hard, error-prone work an assistant should
+// help with, and none of it destroys data.
+func TestShareConfigurationIsAllowed(t *testing.T) {
+	for _, m := range []string{
+		"sharing.smb.create", "sharing.smb.update", "sharing.smb.setacl",
+		"sharing.nfs.create", "sharing.nfs.update",
+	} {
+		if err := CheckDenied(m, nil); err != nil {
+			t.Errorf("%s should be permitted: %v", m, err)
+		}
+	}
+}

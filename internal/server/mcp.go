@@ -87,6 +87,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		// no mutating tool to call, not merely one that refuses.
 		if cfg.EnableWrites {
 			registerWrites(srv, session)
+			registerConfigWrites(srv, session)
 		}
 
 		mcp.AddTool(srv, &mcp.Tool{

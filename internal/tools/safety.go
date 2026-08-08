@@ -41,6 +41,25 @@ var denials = []denial{
 		Arg:    "recursive",
 		Reason: "recursive deletion destroys every child dataset",
 	},
+
+	// Setting one path's ACL is the useful thing. Applying it recursively is
+	// not: the blast radius is unbounded, undoing it requires knowing what
+	// every child ACL was, and getting it wrong locks people out of terabytes.
+	{
+		Method: "filesystem.setacl",
+		Arg:    "recursive",
+		Reason: "applying an ACL recursively rewrites permissions on every child and cannot be undone without knowing the previous ones",
+	},
+	{
+		Method: "filesystem.setacl",
+		Arg:    "traverse",
+		Reason: "traversing filesystem boundaries extends an ACL change beyond the dataset it was aimed at",
+	},
+	{
+		Method: "filesystem.setacl",
+		Arg:    "stripacl",
+		Reason: "stripping an ACL discards the existing permissions rather than editing them",
+	},
 }
 
 // DeniedError is a refusal originating from this server rather than the target.
