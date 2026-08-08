@@ -82,6 +82,12 @@ The server SHALL require TLS on its HTTP transport by default, because caller cr
 - **THEN** the server serves over plaintext
 - **AND** it emits a startup warning that caller API keys will be transmitted in the clear and may be revoked by the target
 
+#### Scenario: TLS terminated by a reverse proxy
+
+- **WHEN** a reverse proxy terminates TLS and forwards to the server over a trusted local network with the plaintext override set
+- **THEN** the server serves the forwarded requests normally
+- **AND** it still emits the plaintext warning, since it cannot observe what fronts it
+
 ### Requirement: Establish middleware sessions once and reuse them
 
 The server SHALL establish a middleware session per authenticated MCP session and reuse it for that session's lifetime, rather than authenticating per tool call.

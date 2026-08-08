@@ -199,9 +199,18 @@ The server therefore connects over the network with a per-session credential exa
 
 Whether the target applies its plaintext-key-revocation behavior to loopback connections must be verified on the live box before assuming a plaintext local hop is safe.
 
-### D11d: Require TLS on the MCP boundary
+### D11d: Require TLS on the MCP boundary, terminated either here or in front
 
-Because D11b puts a TrueNAS API key in a request header on every call, the client-to-server boundary carries credentials that TrueNAS itself revokes if it observes them in plaintext. Serving MCP over plaintext HTTP is therefore not offered as a convenience option, and the server refuses to start without TLS unless the operator sets an explicit override with the same warning the middleware connection uses.
+Because D11b puts a TrueNAS API key in a request header on every call, the client-to-server boundary carries credentials that TrueNAS itself revokes if it observes them in plaintext. Serving MCP over plaintext HTTP is therefore not offered as a convenience option, and the server refuses to start without TLS unless the operator sets an explicit override.
+
+The requirement is about **the boundary the credential crosses**, not about which process performs the handshake. Two topologies satisfy it:
+
+1. **The server terminates TLS**, configured with a certificate and key.
+2. **A reverse proxy terminates TLS** and forwards to the server over a trusted local network. The plaintext override is then correct rather than a compromise, because the credential never crosses an untrusted network in the clear.
+
+The server cannot distinguish these from the inside — a plaintext listener looks the same whether a proxy fronts it or not — so the override remains explicit and still logs a warning. The warning is accurate: it says the credential is transmitted in the clear *on that connection*, which is true and is the operator's to judge.
+
+What this rules out is the case the warning exists for: a plaintext listener reachable directly from an untrusted network, where the override is being used to skip certificate work rather than because something else is doing it.
 
 ### D11: One target server per process
 
