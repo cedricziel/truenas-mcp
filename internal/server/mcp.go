@@ -81,6 +81,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 			registerConcern(srv, concern, session, readOnly)
 		}
 		registerJobs(srv, session)
+		registerDiscovery(srv, session, cfg.EnableWrites)
 
 		// The tool list is the policy: with the write tier disabled there is
 		// no mutating tool to call, not merely one that refuses.
