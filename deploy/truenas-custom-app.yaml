@@ -35,12 +35,15 @@ services:
       # verification and transport scheme are separate settings.
       TRUENAS_MCP_TARGET_INSECURE: "true"
 
-      # Serve MCP without TLS.
+      # Serve MCP without TLS on this listener.
       #
-      # This is only acceptable while the server exposes nothing but a health
-      # endpoint. Once the MCP transport lands, callers transmit their own
-      # TrueNAS API keys on this connection, and this must be replaced with
-      # TRUENAS_MCP_TLS_CERT / TRUENAS_MCP_TLS_KEY.
+      # Correct only because a reverse proxy terminates TLS in front of this
+      # container and forwards over the local network. Callers transmit their
+      # own TrueNAS API keys, so the boundary they cross must be encrypted --
+      # it just is not this process that encrypts it.
+      #
+      # If you expose this port directly instead, set TRUENAS_MCP_TLS_CERT and
+      # TRUENAS_MCP_TLS_KEY and remove this.
       TRUENAS_MCP_ALLOW_PLAINTEXT: "true"
 
       # Mutating tools exposed. Each is a separate tool with its own MCP
