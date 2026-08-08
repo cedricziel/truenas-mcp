@@ -47,7 +47,7 @@ Per design D15, the delivery pipeline is exercised before any feature work. The 
 ## 4. MCP transport and session authentication
 
 - [ ] 4.1 Write failing tests asserting the server holds no TrueNAS credential and refuses sessions that supply none
-- [ ] 4.2 Implement the HTTP transport with a configurable bind address and port
+- [x] 4.2 Implement the HTTP transport with a configurable bind address and port
 - [ ] 4.3 Implement per-session credential extraction and middleware session establishment under the caller's identity
 - [ ] 4.4 Write failing tests for TLS enforcement on the MCP boundary and the explicit plaintext override with its warning
 - [ ] 4.5 Implement TLS enforcement on the MCP boundary
