@@ -133,6 +133,7 @@ Working:
 | `storage` | `list_pools`, `show_pool`, `list_datasets`, `show_dataset`, `list_snapshots` |
 | `system` | `info`, `alerts`, `list_services`, `update_status` |
 | `apps` | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
+| `jobs` | `list`, `show` |
 | `server_info` | — |
 | `system_info` | — |
 
@@ -146,13 +147,39 @@ write tier can act — a mutation surface without them forces the model to
 guess. All three take an app `name`; the middleware has no fleet-wide
 equivalent.
 
+### Write tools
+
+Off by default. Set `TRUENAS_MCP_ENABLE_WRITES=true` to expose them.
+
+| Tool | Effect | Annotated |
+|---|---|---|
+| `app_pull_images` | pull latest images and redeploy | destructive |
+| `app_redeploy` | redeploy without pulling | destructive |
+| `app_stop` | stop a running app | destructive, idempotent |
+| `app_upgrade` | upgrade to a newer version | destructive |
+| `app_rollback` | roll back a bad upgrade or pull | destructive |
+| `app_start` | start a stopped app | idempotent |
+| `create_snapshot` | snapshot a dataset | additive |
+
+Each is a separate tool, so each is a separate consent decision — bundling
+them behind one `op` would put `app_stop` behind the same gate as `app_start`.
+`app_rollback` ships whenever the others do; it is the recovery path that makes
+exposing them defensible.
+
+Mutations never block. They return a `job_id` immediately; follow it with
+`jobs(op="show", job_id=…)`.
+
+**Denied under every configuration:** pool export, dataset deletion, disk wipe,
+boot detach, snapshot destruction — and `app.delete` with `remove_ixvolumes`,
+because the danger there is in the argument, not the method. None of this is
+switchable; use the web interface.
+
 **On app logs:** TrueNAS 26 exposes no JSON-RPC method that returns container
 log output — the web UI streams it over a separate channel. `apps containers`
 returns the container identities such a transport would need, and is useful on
 its own. Log streaming is tracked as future work.
 
-Not yet built: the app lifecycle write tier, method discovery, resources, and
-job tracking.
+Not yet built: method discovery and MCP resources.
 
 ## Development
 
