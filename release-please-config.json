@@ -3,12 +3,28 @@
   "packages": {
     ".": {
       "release-type": "go",
-      "release-as": "0.1.0",
       "package-name": "truenas-mcp",
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.packages[*].version"
+        },
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.packages[*].identifier"
+        }
+      ],
       "changelog-sections": [
         {
           "type": "feat",

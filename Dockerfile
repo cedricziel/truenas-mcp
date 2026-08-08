@@ -20,6 +20,10 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
 # the target's TLS, and runs as an unprivileged user with no shell.
 FROM gcr.io/distroless/static-debian12:nonroot
 
+# The MCP registry proves you own a published image by reading this label back
+# off it and matching it against `name` in server.json.
+LABEL io.modelcontextprotocol.server.name="io.github.cedricziel/truenas-mcp"
+
 COPY --from=build /out/truenas-mcp /usr/local/bin/truenas-mcp
 
 USER nonroot:nonroot
