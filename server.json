@@ -1,0 +1,68 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.cedricziel/truenas-mcp",
+  "title": "TrueNAS SCALE",
+  "description": "Inspect and manage TrueNAS SCALE storage, shares, apps and system state with your own API key",
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/cedricziel/truenas-mcp#deploying-as-a-truenas-app",
+  "repository": {
+    "url": "https://github.com/cedricziel/truenas-mcp",
+    "source": "github",
+    "id": "1327728275"
+  },
+  "packages": [
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "ghcr.io/cedricziel/truenas-mcp:0.1.0",
+      "version": "0.1.0",
+      "runtimeHint": "docker",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8080/mcp",
+        "headers": [
+          {
+            "name": "Authorization",
+            "description": "Your own TrueNAS API key as `Bearer <key>`. Create it under Credentials -> API Keys. The server stores no credential; the session reaches exactly what this key permits.",
+            "isRequired": true,
+            "isSecret": true
+          }
+        ]
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--publish",
+          "value": "127.0.0.1:8080:8080",
+          "description": "Bind the MCP listener to loopback only. Plaintext is enabled below on the assumption that nothing off-host can reach it."
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "TRUENAS_MCP_TARGET",
+          "description": "TrueNAS host to manage, optionally `host:port`. Requires TrueNAS SCALE 25.04 or later.",
+          "placeholder": "nas.local",
+          "isRequired": true
+        },
+        {
+          "name": "TRUENAS_MCP_ALLOW_PLAINTEXT",
+          "description": "Serve MCP without TLS. Set here because the listener is published on loopback only; drop it and supply TRUENAS_MCP_TLS_CERT/KEY if the port is reachable from elsewhere.",
+          "format": "boolean",
+          "value": "true"
+        },
+        {
+          "name": "TRUENAS_MCP_TARGET_INSECURE",
+          "description": "Accept the TrueNAS certificate unverified while keeping the connection encrypted. TrueNAS ships a self-signed certificate for `CN=localhost`, so no address you can reach it by will validate.",
+          "format": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "TRUENAS_MCP_ENABLE_WRITES",
+          "description": "Expose the mutating tools. Read-only by default; unrecoverable operations stay unreachable either way.",
+          "format": "boolean",
+          "default": "false"
+        }
+      ]
+    }
+  ]
+}
