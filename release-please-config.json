@@ -17,11 +17,6 @@
         {
           "type": "json",
           "path": "server.json",
-          "jsonpath": "$.packages[*].version"
-        },
-        {
-          "type": "json",
-          "path": "server.json",
           "jsonpath": "$.packages[*].identifier"
         }
       ],
