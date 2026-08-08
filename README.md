@@ -201,15 +201,22 @@ The middleware has 815 methods across 74 namespaces. Most will never justify a
 dedicated tool, so `search_methods` / `describe_method` / `call_method` cover
 the tail without a code change per release.
 
-They are bounded by an **allowlist of method shapes**, not a denylist. An
-allowlist fails closed: a method invented in a future TrueNAS release is
-unreachable until someone decides otherwise. A denylist maintained against an
-API that grows every six months fails open, which is the wrong default for a
-box holding the only copy of your data.
+Reachability is decided by the target's **own RBAC metadata**, not by guessing
+from method names: a method is readable exactly when it grants
+`READONLY_ADMIN`, and mutating methods need the write tier. That is the
+middleware's own answer, so it is exact and tracks API versions without a
+change here. It reaches **94% of the API** — 411 readable, 359 mutating.
 
-Write-shaped methods are checked before read-shaped ones, because some mutating
-names also read as reads — `app.pull_images` ends in `_images` — and when the
-classifications overlap the safer one has to win.
+The 6% withheld is deliberate:
+
+- **`core.bulk`** invokes arbitrary methods; reachable, it would bypass the
+  denylist, the write tier, and every other gate here.
+- **`auth.*`** is the server's to manage. A caller driving it could mint a
+  token that outlives the session and never appears in the API keys UI — a
+  credential the operator never issued.
+- **Methods declaring no roles at all.** On this target those are session and
+  protocol plumbing, not harmless reads, so "no privilege check" is treated as
+  unknown risk rather than no risk.
 
 `describe_method` summarises rather than dumps. Measured on a live target,
 `sharing.smb.create`'s schema is ~31,000 characters and
