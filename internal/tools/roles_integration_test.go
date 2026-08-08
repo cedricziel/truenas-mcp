@@ -63,7 +63,7 @@ func TestReadConcernsOnlyUseReadOnlyMethods(t *testing.T) {
 				continue
 			}
 
-			readable := false
+			readable := IsSafeUnroledRead(op.Method)
 			for _, r := range meta.Roles {
 				if r == "READONLY_ADMIN" {
 					readable = true

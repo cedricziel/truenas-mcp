@@ -95,9 +95,13 @@ func CheckDiscoverable(m MethodInfo, writesEnabled bool) error {
 	}
 
 	// A method declaring no roles has no privilege check at all. On this target
-	// those are session and protocol plumbing rather than harmless reads, so
-	// "no roles" is treated as unknown risk rather than no risk.
+	// those are mostly session and protocol plumbing rather than harmless
+	// reads, so "no roles" is treated as unknown risk rather than no risk --
+	// except for the few individually established to be side-effect free.
 	if len(m.Roles) == 0 {
+		if IsSafeUnroledRead(m.Name) {
+			return nil
+		}
 		return &DiscoveryError{
 			Method: m.Name,
 			Reason: "it declares no privilege requirement, so its effect cannot be established",

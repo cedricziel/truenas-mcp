@@ -46,11 +46,12 @@ func TestMutatingMethodsNeedWritesEnabled(t *testing.T) {
 }
 
 // A method that declares no roles has no privilege check at all. On this
-// target those are session and protocol plumbing -- login, logout, subscribe,
-// token minting -- not harmless reads. Treating "no roles" as "no risk" would
-// be exactly backwards.
-func TestUnroledMethodsAreRefused(t *testing.T) {
-	for _, name := range []string{"core.ping", "core.set_options", "core.subscribe"} {
+// target those are mostly session and protocol plumbing -- login, subscribe,
+// abort, bulk execution -- not harmless reads. Treating "no roles" as "no
+// risk" would be exactly backwards, so the default is refusal and the few
+// genuinely harmless ones are allowed individually.
+func TestUnroledMethodsAreRefusedByDefault(t *testing.T) {
+	for _, name := range []string{"core.set_options", "core.subscribe", "core.job_abort"} {
 		if err := CheckDiscoverable(unroled(name), true); err == nil {
 			t.Errorf("%s declares no roles and must not be discoverable", name)
 		}
@@ -90,7 +91,7 @@ func TestDenylistOutranksRoles(t *testing.T) {
 }
 
 func TestRefusalDoesNotLeakMethodDetail(t *testing.T) {
-	err := CheckDiscoverable(unroled("core.subscribe"), false)
+	err := CheckDiscoverable(unroled("core.set_options"), false)
 	if err == nil {
 		t.Fatal("expected a refusal")
 	}
