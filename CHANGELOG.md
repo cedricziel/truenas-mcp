@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/cedricziel/truenas-mcp/compare/v0.2.0...v0.2.1) (2026-08-08)
+
+
+### Documentation
+
+* sync the specs and archive the change ([#10](https://github.com/cedricziel/truenas-mcp/issues/10)) ([8038f1c](https://github.com/cedricziel/truenas-mcp/commit/8038f1c746fefc92116002323eba46a016656e07))
+
 ## [0.2.0](https://github.com/cedricziel/truenas-mcp/compare/v0.1.2...v0.2.0) (2026-08-08)
 
 
