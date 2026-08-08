@@ -124,11 +124,29 @@ Working:
 - JSON-RPC middleware client: concurrent calls on one connection, structured
   errors distinguishing unreachable / unauthenticated / unauthorized / rate
   limited, and interrupted requests reported as *may have been applied*
-- `server_info`, `system_info`
 - Container image, CI, GHCR publication, TrueNAS app deployment
 
-Not yet built: the concern-level read tools, the app lifecycle write tier,
-method discovery, resources, and job tracking.
+### Tools
+
+| Tool | Operations |
+|---|---|
+| `storage` | `list_pools`, `show_pool`, `list_datasets`, `show_dataset`, `list_snapshots` |
+| `system` | `info`, `alerts`, `list_services`, `update_status` |
+| `apps` | `list`, `show`, `config`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
+| `server_info` | — |
+| `system_info` | — |
+
+All read-only, all annotated `readOnlyHint`. Every method behind them is
+verified against the target's own RBAC metadata to grant `READONLY_ADMIN`,
+so "this tool cannot mutate" is checked rather than asserted.
+
+The `apps` operations `outdated_images`, `upgrade_summary`, and
+`rollback_versions` exist so a caller can decide *whether* to act before the
+write tier can act — a mutation surface without them forces the model to
+guess.
+
+Not yet built: the app lifecycle write tier, method discovery, resources, and
+job tracking.
 
 ## Development
 
