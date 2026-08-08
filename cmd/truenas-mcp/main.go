@@ -63,12 +63,18 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 
 	health := server.NewHealth(version)
 
+	// Each caller's tools run on a connection authenticated with that caller's
+	// own API key. The server stores none.
+	sessions := server.NewSessionManager(cfg.TargetURL(), cfg.TargetInsecureSkipVerify)
+	defer sessions.CloseAll()
+
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
 	mux.Handle("/mcp", server.NewMCPHandler(server.MCPConfig{
 		Version:      version,
 		Target:       cfg.Target,
 		EnableWrites: cfg.EnableWrites,
+		Sessions:     sessions,
 	}))
 
 	srv := &http.Server{
