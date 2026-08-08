@@ -47,17 +47,10 @@ func registerWrites(srv *mcp.Server, session sessionFor) {
 }
 
 func registerWrite(srv *mcp.Server, w tools.WriteOp, session sessionFor) {
-	destructive := w.Destructive
-	idempotent := w.Idempotent
-
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        w.Name,
 		Description: w.Description,
-		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint:    false,
-			DestructiveHint: &destructive,
-			IdempotentHint:  idempotent,
-		},
+		Annotations: writeAnnotations(w.Title, w.Destructive, w.Idempotent),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in WriteInput) (*mcp.CallToolResult, JobStartedOutput, error) {
 		if in.Target == "" {
 			return toolError(fmt.Sprintf("%s requires a target", w.Name)), JobStartedOutput{}, nil

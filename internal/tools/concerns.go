@@ -14,6 +14,7 @@ package tools
 func Storage() *Concern {
 	return &Concern{
 		Name:        "storage",
+		Title:       "Storage: pools, datasets, snapshots",
 		Description: "Read pools, datasets, and snapshots on the TrueNAS target.",
 		Ops: []Op{
 			{
@@ -55,6 +56,7 @@ func Storage() *Concern {
 func System() *Concern {
 	return &Concern{
 		Name:        "system",
+		Title:       "System health and alerts",
 		Description: "Read the TrueNAS target's identity, health, and alerts.",
 		Ops: []Op{
 			{
@@ -88,6 +90,7 @@ func System() *Concern {
 func Apps() *Concern {
 	return &Concern{
 		Name:        "apps",
+		Title:       "Installed applications",
 		Description: "Read installed applications, their state, and what needs updating.",
 		Ops: []Op{
 			{

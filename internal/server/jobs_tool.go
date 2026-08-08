@@ -32,7 +32,7 @@ func registerJobs(srv *mcp.Server, session sessionFor) {
 			"  list — recent jobs and their state\n" +
 			"  show — one job's state, progress, and outcome (requires job_id)\n\n" +
 			"Mutating tools return a job_id rather than waiting; use show to follow it.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: readAnnotations("Long-running operations"),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in JobsInput) (*mcp.CallToolResult, JobsOutput, error) {
 		s, err := session(ctx)
 		if err != nil {

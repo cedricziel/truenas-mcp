@@ -41,7 +41,12 @@ type Op struct {
 
 // Concern is a user-facing grouping of read operations, exposed as one tool.
 type Concern struct {
-	Name        string
+	Name string
+
+	// Title is shown to a human in a client's consent dialog, where the raw
+	// tool name reads poorly.
+	Title string
+
 	Description string
 	Ops         []Op
 }

@@ -18,6 +18,11 @@ type WriteOp struct {
 	// Name is the tool name.
 	Name string
 
+	// Title is shown to a human in a client's consent dialog. A mutating tool
+	// is exactly where that matters: "Stop an app" is a decision someone can
+	// make, "app_stop" is an identifier.
+	Title string
+
 	// Description is what the model reads.
 	Description string
 
@@ -44,7 +49,8 @@ type WriteOp struct {
 func AppWrites() []WriteOp {
 	return []WriteOp{
 		{
-			Name: "app_pull_images",
+			Name:  "app_pull_images",
+			Title: "Pull new images and redeploy an app",
 			Description: "Pull the latest container images for an installed app and redeploy it. " +
 				"This is how you update an app that tracks a moving image tag. " +
 				"Redeploys by default; the app is briefly unavailable while it restarts. " +
@@ -55,7 +61,8 @@ func AppWrites() []WriteOp {
 			Options:     []string{"redeploy"},
 		},
 		{
-			Name: "app_redeploy",
+			Name:  "app_redeploy",
+			Title: "Redeploy an app",
 			Description: "Redeploy an installed app without pulling new images. " +
 				"Use this to apply a configuration change or restart a stuck app. " +
 				"The app is briefly unavailable.",
@@ -65,13 +72,15 @@ func AppWrites() []WriteOp {
 		},
 		{
 			Name:        "app_start",
+			Title:       "Start an app",
 			Description: "Start a stopped app.",
 			Method:      "app.start",
 			Idempotent:  true,
 			TargetArg:   "app_name",
 		},
 		{
-			Name: "app_stop",
+			Name:  "app_stop",
+			Title: "Stop an app",
 			Description: "Stop a running app. The app becomes unavailable until started again. " +
 				"Reversible with app_start.",
 			Method:      "app.stop",
@@ -80,7 +89,8 @@ func AppWrites() []WriteOp {
 			TargetArg:   "app_name",
 		},
 		{
-			Name: "app_upgrade",
+			Name:  "app_upgrade",
+			Title: "Upgrade an app",
 			Description: "Upgrade an app to a newer catalog version. " +
 				"Check apps/upgrade_summary first to see what would change. " +
 				"Reversible with app_rollback.",
@@ -89,7 +99,8 @@ func AppWrites() []WriteOp {
 			TargetArg:   "app_name",
 		},
 		{
-			Name: "app_rollback",
+			Name:  "app_rollback",
+			Title: "Roll an app back to a previous version",
 			Description: "Roll an app back to a previous version. " +
 				"This is the recovery path for a bad upgrade or image pull. " +
 				"Use apps/rollback_versions to see what is available.",
@@ -103,7 +114,8 @@ func AppWrites() []WriteOp {
 // SnapshotWrite is the additive companion to any risky operation.
 func SnapshotWrite() WriteOp {
 	return WriteOp{
-		Name: "create_snapshot",
+		Name:  "create_snapshot",
+		Title: "Create a snapshot",
 		Description: "Create a ZFS snapshot of a dataset. Additive and cheap; " +
 			"take one before any risky change.",
 		Method:    "pool.snapshot.create",

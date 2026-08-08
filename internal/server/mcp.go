@@ -60,15 +60,13 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		Version: cfg.Version,
 	}, nil)
 
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
-
 	registerResources(srv, session)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "server_info",
 		Description: "Report which TrueNAS instance this server manages, which build " +
 			"it is running, and whether mutating tools are enabled.",
-		Annotations: readOnly,
+		Annotations: readAnnotations("About this server"),
 	}, func(_ context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, ServerInfoOutput, error) {
 		return nil, ServerInfoOutput{
 			Name:          "truenas-mcp",
@@ -80,7 +78,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 
 	if session != nil {
 		for _, concern := range tools.ReadConcerns() {
-			registerConcern(srv, concern, session, readOnly)
+			registerConcern(srv, concern, session)
 		}
 		registerJobs(srv, session)
 		registerDiscovery(srv, session, cfg.EnableWrites)
@@ -95,7 +93,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 			Name: "system_info",
 			Description: "Get the target TrueNAS system's version, hostname, and uptime. " +
 				"Runs under the calling user's own API key.",
-			Annotations: readOnly,
+			Annotations: readAnnotations("TrueNAS system information"),
 		}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, SystemInfoOutput, error) {
 			s, err := session(ctx)
 			if err != nil {

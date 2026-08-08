@@ -61,13 +61,11 @@ type CallOutput struct {
 // Everything here is bounded by the same allowlist, so discovery widens what
 // is convenient without widening what is reachable.
 func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) {
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
-
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "search_methods",
 		Description: "Find TrueNAS middleware methods by name when no dedicated tool covers " +
 			"what you need. Only methods this server will actually run are listed.",
-		Annotations: readOnly,
+		Annotations: readAnnotations("Find middleware methods"),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 		if strings.TrimSpace(in.Query) == "" {
 			return toolError("search_methods requires a query"), SearchOutput{}, nil
@@ -127,7 +125,7 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 		Description: "Show what a middleware method takes and whether it starts a job. " +
 			"Returns the arguments that matter plus a count of omitted optional ones; " +
 			"pass full=true for the complete schema.",
-		Annotations: readOnly,
+		Annotations: readAnnotations("Describe a middleware method"),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in DescribeInput) (*mcp.CallToolResult, DescribeOutput, error) {
 		if err := tools.CheckDiscoverable(in.Method, writesEnabled); err != nil {
 			return toolError(err.Error()), DescribeOutput{}, nil
@@ -155,12 +153,13 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 		}, nil
 	})
 
-	destructive := true
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "call_method",
 		Description: "Invoke a TrueNAS middleware method directly. Use describe_method first " +
 			"to learn its parameters. Only methods this server allows are callable.",
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: &destructive},
+		// Conservatively destructive: what an arbitrary method does is not
+		// knowable from here, so the caller should be asked.
+		Annotations: writeAnnotations("Call a middleware method directly", true, false),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in CallInput) (*mcp.CallToolResult, CallOutput, error) {
 		if err := tools.CheckDiscoverable(in.Method, writesEnabled); err != nil {
 			return toolError(err.Error()), CallOutput{}, nil
