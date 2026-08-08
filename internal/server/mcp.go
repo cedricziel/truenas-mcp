@@ -62,6 +62,8 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 
+	registerResources(srv, session)
+
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "server_info",
 		Description: "Report which TrueNAS instance this server manages, which build " +
