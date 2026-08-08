@@ -65,6 +65,11 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
+	mux.Handle("/mcp", server.NewMCPHandler(server.MCPConfig{
+		Version:      version,
+		Target:       cfg.Target,
+		EnableWrites: cfg.EnableWrites,
+	}))
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
