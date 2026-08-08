@@ -84,3 +84,39 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Listing the server in the MCP registry is a separate job because it needs a
+  # different privilege than pushing the image: an OIDC identity token rather
+  # than package write. It runs after `publish` because the registry proves
+  # ownership by pulling the image named in server.json and reading the
+  # io.modelcontextprotocol.server.name label off it — so the image has to exist
+  # first, and it has to be public, which the registry pulls anonymously.
+  publish-registry:
+    needs: [release-please, publish]
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+
+      # Deliberately unpinned: the registry rejects tokens minted by older
+      # binaries with "invalid audience", and the upstream fix for that is to
+      # re-fetch the latest release.
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      # OIDC means no long-lived registry credential exists in this repository
+      # to leak or scope-creep. The namespace it grants, io.github.cedricziel,
+      # follows from the repository owner.
+      - name: Authenticate to the MCP registry
+        run: ./mcp-publisher login github-oidc
+
+      # server.json carries the released version because release-please bumps
+      # it in the same PR that bumps the manifest.
+      - name: Publish to the MCP registry
+        run: ./mcp-publisher publish
