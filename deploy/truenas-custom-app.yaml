@@ -43,9 +43,14 @@ services:
       # TRUENAS_MCP_TLS_CERT / TRUENAS_MCP_TLS_KEY.
       TRUENAS_MCP_ALLOW_PLAINTEXT: "true"
 
-      # The write tier is off by default. Leave it off until the consent model
-      # has been exercised.
-      TRUENAS_MCP_ENABLE_WRITES: "false"
+      # Mutating tools exposed. Each is a separate tool with its own MCP
+      # annotation, so each is a separate consent decision in the client --
+      # app_stop does not ride along with app_start.
+      #
+      # The unrecoverable-operation denylist still applies and is not
+      # switchable: pool export, dataset deletion, disk wipe, and app deletion
+      # with volume removal stay unreachable regardless of this setting.
+      TRUENAS_MCP_ENABLE_WRITES: "true"
 
     healthcheck:
       # The image is distroless and carries no shell or curl, so the health
