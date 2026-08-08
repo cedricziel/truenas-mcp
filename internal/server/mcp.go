@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/cedricziel/truenas-mcp/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -76,6 +77,10 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 	})
 
 	if session != nil {
+		for _, concern := range tools.ReadConcerns() {
+			registerConcern(srv, concern, session, readOnly)
+		}
+
 		mcp.AddTool(srv, &mcp.Tool{
 			Name: "system_info",
 			Description: "Get the target TrueNAS system's version, hostname, and uptime. " +
