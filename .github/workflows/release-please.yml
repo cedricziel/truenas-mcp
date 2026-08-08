@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     branches: [main]
+  # Lets a release be re-attempted without an empty commit, which matters when
+  # a run fails for a reason outside the repository, such as a missing token.
+  workflow_dispatch:
 
 # Releasing happens here and nowhere else: this workflow decides the version,
 # cuts the tag, and publishes the image carrying it. ci.yml deliberately does
