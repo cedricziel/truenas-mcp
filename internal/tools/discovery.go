@@ -99,23 +99,44 @@ func matchesAny(method string, suffixes []string) bool {
 // less accurately than small dense ones, so a faithful dump costs more and
 // works worse.
 func SummarizeSchema(params []SchemaParam, full bool) SchemaSummary {
-	if full {
-		return SchemaSummary{Params: params, Omitted: 0}
+	// Middleware methods overwhelmingly take one object parameter wrapping the
+	// real arguments. Summarising only the top level would keep that object
+	// whole and reduce nothing, so flatten into it first.
+	if len(params) == 1 && len(params[0].Properties) > 0 {
+		params = params[0].Properties
 	}
 
-	var kept []SchemaParam
+	kept := []FlatParam{}
 	omitted := 0
 	for _, p := range params {
 		// Required parameters and those without a default are what a caller
-		// actually has to decide about.
-		if p.Required || p.Default == nil {
-			kept = append(kept, p)
+		// actually has to decide about; everything else has a working value
+		// already and only adds tokens.
+		if full || p.Required || p.Default == nil {
+			kept = append(kept, FlatParam{
+				Name:        p.Name,
+				Type:        p.Type,
+				Description: p.Description,
+				Required:    p.Required,
+				Default:     p.Default,
+			})
 			continue
 		}
 		omitted++
 	}
 
 	return SchemaSummary{Params: kept, Omitted: omitted}
+}
+
+// FlatParam is a summarised argument. It deliberately carries no nested
+// properties: the summary is always one level deep, which is what keeps the
+// output schema expressible and the result readable.
+type FlatParam struct {
+	Name        string `json:"name"`
+	Type        string `json:"type,omitempty"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required"`
+	Default     any    `json:"default,omitempty" jsonschema:"the value used when this argument is omitted"`
 }
 
 // SchemaParam is one argument of a middleware method.
@@ -125,10 +146,14 @@ type SchemaParam struct {
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required"`
 	Default     any    `json:"default,omitempty" jsonschema:"the value used when this argument is omitted"`
+
+	// Properties are the nested fields when this parameter is an object,
+	// which is the usual middleware shape.
+	Properties []SchemaParam `json:"properties,omitempty" jsonschema:"nested fields when this parameter is an object"`
 }
 
 // SchemaSummary is a reduced argument schema plus what was left out.
 type SchemaSummary struct {
-	Params  []SchemaParam `json:"params"`
-	Omitted int           `json:"omitted_optional_params,omitempty"`
+	Params  []FlatParam `json:"params"`
+	Omitted int         `json:"omitted_optional_params,omitempty"`
 }

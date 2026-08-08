@@ -104,3 +104,48 @@ func TestWriteShapesOutrankReadShapes(t *testing.T) {
 		}
 	}
 }
+
+// Middleware methods overwhelmingly take a single object parameter with the
+// real arguments nested inside it. Summarising only the top level therefore
+// achieves nothing for exactly the methods that need it -- sharing.smb.create
+// is one top-level param wrapping a ~31,000-character structure.
+func TestSummaryFlattensASingleObjectParameter(t *testing.T) {
+	params := []SchemaParam{{
+		Name:     "smb_create",
+		Type:     "object",
+		Required: true,
+		Properties: []SchemaParam{
+			{Name: "path", Required: true},
+			{Name: "name", Required: true},
+			{Name: "purpose", Default: "DEFAULT_SHARE"},
+			{Name: "comment", Default: ""},
+			{Name: "ro", Default: false},
+		},
+	}}
+
+	got := SummarizeSchema(params, false)
+	if len(got.Params) != 2 {
+		t.Fatalf("expected the two required nested fields, got %d: %+v", len(got.Params), got.Params)
+	}
+	if got.Omitted != 3 {
+		t.Errorf("omitted = %d, want 3", got.Omitted)
+	}
+}
+
+func TestFullSchemaKeepsEverything(t *testing.T) {
+	params := []SchemaParam{{
+		Name: "wrapper", Type: "object", Required: true,
+		Properties: []SchemaParam{
+			{Name: "a", Required: true},
+			{Name: "b", Default: 1},
+		},
+	}}
+
+	got := SummarizeSchema(params, true)
+	if len(got.Params) != 2 {
+		t.Fatalf("full=true must keep every field, got %+v", got.Params)
+	}
+	if got.Omitted != 0 {
+		t.Errorf("full=true omits nothing, got omitted=%d", got.Omitted)
+	}
+}

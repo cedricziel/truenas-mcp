@@ -19,13 +19,13 @@ type DescribeInput struct {
 
 // DescribeOutput summarises a method rather than dumping its schema.
 type DescribeOutput struct {
-	Method      string              `json:"method"`
-	Description string              `json:"description,omitempty"`
-	Job         bool                `json:"job,omitempty" jsonschema:"whether this starts a long-running job"`
-	ReadOnly    bool                `json:"read_only" jsonschema:"whether the method only reads state"`
-	Params      []tools.SchemaParam `json:"params"`
-	Omitted     int                 `json:"omitted_optional_params,omitempty" jsonschema:"optional params left out; pass full=true for all"`
-	Example     string              `json:"example,omitempty"`
+	Method      string            `json:"method"`
+	Description string            `json:"description,omitempty"`
+	Job         bool              `json:"job,omitempty" jsonschema:"whether this starts a long-running job"`
+	ReadOnly    bool              `json:"read_only" jsonschema:"whether the method only reads state"`
+	Params      []tools.FlatParam `json:"params"`
+	Omitted     int               `json:"omitted_optional_params,omitempty" jsonschema:"optional params left out; pass full=true for all"`
+	Example     string            `json:"example,omitempty"`
 }
 
 // SearchInput finds methods by substring.
@@ -103,6 +103,9 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 			matched = append(matched, name)
 		}
 		sort.Strings(matched)
+		if matched == nil {
+			matched = []string{}
+		}
 
 		note := ""
 		if len(matched) > limit {
@@ -209,16 +212,29 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 
 // rawMethodMeta is the introspection payload this server relies on.
 type rawMethodMeta struct {
-	Description string   `json:"description"`
-	Job         bool     `json:"job"`
-	Roles       []string `json:"roles"`
-	Accepts     []struct {
-		Name        string `json:"_name_"`
-		Required    bool   `json:"_required_"`
-		Type        string `json:"type"`
-		Description string `json:"description"`
-		Default     any    `json:"default"`
-	} `json:"accepts"`
+	Description string        `json:"description"`
+	Job         bool          `json:"job"`
+	Roles       []string      `json:"roles"`
+	Accepts     []acceptParam `json:"accepts"`
+}
+
+// acceptParam mirrors one middleware parameter, including the nested fields
+// that carry the bulk of a schema's size.
+type acceptParam struct {
+	Name        string                 `json:"_name_"`
+	Required    bool                   `json:"_required_"`
+	Type        string                 `json:"type"`
+	Description string                 `json:"description"`
+	Default     any                    `json:"default"`
+	Properties  map[string]nestedParam `json:"properties"`
+}
+
+type nestedParam struct {
+	Type        string `json:"type"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Required    bool   `json:"_required_"`
+	Default     any    `json:"default"`
 }
 
 func (m rawMethodMeta) readOnly() bool {
@@ -233,13 +249,30 @@ func (m rawMethodMeta) readOnly() bool {
 func (m rawMethodMeta) params() []tools.SchemaParam {
 	out := make([]tools.SchemaParam, 0, len(m.Accepts))
 	for _, a := range m.Accepts {
-		out = append(out, tools.SchemaParam{
+		p := tools.SchemaParam{
 			Name:        a.Name,
 			Type:        a.Type,
 			Description: a.Description,
 			Required:    a.Required,
 			Default:     a.Default,
+		}
+		for name, n := range a.Properties {
+			p.Properties = append(p.Properties, tools.SchemaParam{
+				Name:        name,
+				Type:        n.Type,
+				Description: n.Description,
+				Required:    n.Required,
+				Default:     n.Default,
+			})
+		}
+		sort.Slice(p.Properties, func(i, j int) bool {
+			// Required fields first: they are what a caller must decide about.
+			if p.Properties[i].Required != p.Properties[j].Required {
+				return p.Properties[i].Required
+			}
+			return p.Properties[i].Name < p.Properties[j].Name
 		})
+		out = append(out, p)
 	}
 	return out
 }
