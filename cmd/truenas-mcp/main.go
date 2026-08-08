@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -25,10 +26,24 @@ var version = "dev"
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
+	healthcheck := flag.Bool("healthcheck", false,
+		"probe the local health endpoint and exit; used as the container health check")
+	flag.Parse()
+
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		log.Error("invalid configuration", "error", err)
 		os.Exit(1)
+	}
+
+	// Runs inside the container as its health check, since the distroless
+	// image carries no shell or HTTP client.
+	if *healthcheck {
+		if err := server.Probe(server.ProbeURL(cfg.Listen)); err != nil {
+			log.Error("health probe failed", "error", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	log.Info("starting truenas-mcp", "version", version, "config", cfg.Summary())
