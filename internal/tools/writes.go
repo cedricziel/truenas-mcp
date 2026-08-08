@@ -120,6 +120,7 @@ func SnapshotWrite() WriteOp {
 			"take one before any risky change.",
 		Method:    "pool.snapshot.create",
 		TargetArg: "dataset",
+		Options:   []string{"snapshot_name"},
 	}
 }
 
