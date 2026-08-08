@@ -102,6 +102,13 @@ func (m *SessionManager) Open(ctx context.Context, apiKey string) (*Session, err
 		return nil, err
 	}
 
+	// Refuse a target too old for the versioned JSON-RPC API rather than
+	// failing obscurely on the first method that does not exist there.
+	if _, err := client.CheckVersion(ctx); err != nil {
+		_ = client.Close()
+		return nil, err
+	}
+
 	return &Session{client: client}, nil
 }
 

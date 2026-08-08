@@ -231,6 +231,15 @@ func scrub(err error, secret string) error {
 	return fmt.Errorf("%s", strings.ReplaceAll(err.Error(), secret, "[redacted]"))
 }
 
+// Alive reports whether the connection can still carry requests. A caller
+// holding a long-lived session uses this to decide whether to re-establish
+// rather than retrying against a socket the peer has already closed.
+func (c *Client) Alive() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.closed && c.readErr == nil
+}
+
 // Close releases the connection. It is safe to call more than once.
 func (c *Client) Close() error {
 	c.mu.Lock()
