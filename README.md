@@ -137,7 +137,11 @@ was always an enhancement over it, and MCP client support for it is thin.
 | Tool | Operations |
 |---|---|
 | `storage` | `list_pools`, `show_pool`, `list_datasets`, `show_dataset`, `list_snapshots` |
-| `system` | `info`, `alerts`, `list_services`, `update_status` |
+| `system` | `info`, `alerts`, `list_services`, `update_status`, `version`, `audit_log` |
+| `sharing` | `list_smb`, `show_smb`, `smb_acl`, `list_nfs`, `show_nfs`, `list_web` |
+| `virtualization` | `list_vms`, `show_vm`, `vm_devices`, `list_containers`, `show_container`, `container_devices` |
+| `backup` | `list_cloud_syncs`, `show_cloud_sync`, `cloud_credentials`, `list_replications`, `show_replication`, `list_rsync_tasks`, `list_snapshot_tasks` |
+| `filesystem` | `list_directory`, `stat`, `space`, `acl` |
 | `apps` | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
 | `jobs` | `list`, `show` |
 | `search_methods` | find middleware methods by name |
@@ -176,6 +180,27 @@ Off by default. Set `TRUENAS_MCP_ENABLE_WRITES=true` to expose them.
 | `app_rollback` | roll back a bad upgrade or pull | destructive |
 | `app_start` | start a stopped app | idempotent |
 | `create_snapshot` | snapshot a dataset | additive |
+| `create_smb_share` | share a path over SMB | additive |
+| `update_smb_share` | change an SMB share | destructive |
+| `delete_smb_share` | stop sharing over SMB | destructive |
+| `create_nfs_export` | export a path over NFS | additive |
+| `update_nfs_export` | change an NFS export | destructive |
+| `delete_nfs_export` | stop exporting over NFS | destructive |
+| `set_smb_share_acl` | who may connect to a share | destructive |
+| `set_path_acl` | filesystem permissions on a path | destructive |
+
+**Share and permission configuration is the point.** It is the hardest part of
+running TrueNAS and the least destructive: a misconfigured share is a support
+thread, not data loss. Handing that to an assistant is squarely what this
+server is for.
+
+The one genuine hazard lives in an *argument*, not a method. `filesystem.setacl`
+accepts `recursive`, `traverse`, and `stripacl` — recursive plus stripacl walks
+a whole dataset discarding every ACL, which locks people out of terabytes and
+cannot be undone without knowing what the previous permissions were. All three
+are refused permanently, so setting one path's ACL stays available while the
+unbounded form does not. That distinction is the entire reason the denylist
+gates argument values rather than method names.
 
 Each is a separate tool, so each is a separate consent decision — bundling
 them behind one `op` would put `app_stop` behind the same gate as `app_start`.
