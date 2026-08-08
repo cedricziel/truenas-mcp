@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -20,20 +21,49 @@ import (
 // so renames and additions inside an allowed shape keep working. Enumerating
 // names would be the transcription problem this design exists to avoid.
 
-// readSuffixes are method shapes that read state. The middleware is consistent
-// enough about these that matching on shape is reliable.
-var readSuffixes = []string{
-	".query", ".get_instance", ".config", ".choices", ".summary",
-	".status", ".info", ".list", ".results", ".get_data", ".stats",
-	"_choices", "_info", "_status", "_summary", "_versions", "_ids",
-	"_get_data", "_results", "_query", "_list", "_images",
+// MethodInfo is the introspection this server needs to decide whether a method
+// may be reached through discovery.
+type MethodInfo struct {
+	Name  string
+	Roles []string
+	Job   bool
 }
 
-// writeSuffixes are method shapes that mutate state. Reachable only when the
-// write tier is enabled.
-var writeSuffixes = []string{
-	".create", ".update", ".start", ".stop", ".restart", ".upgrade",
-	".rollback", ".redeploy", ".pull_images", ".sync", ".scrub",
+// readOnlyRole is the middleware's own marker for a method that does not
+// mutate. Using it beats guessing from a method's name: it is the target's
+// answer, it is exact, and it tracks API versions without a change here.
+const readOnlyRole = "READONLY_ADMIN"
+
+// discoveryExclusions are namespaces and methods withheld from discovery
+// regardless of what their roles claim.
+//
+// These are not unrecoverable in the way the denylist's entries are -- they are
+// withheld because reaching them would undermine the gating itself.
+var discoveryExclusions = []struct {
+	prefix string
+	reason string
+}{
+	{
+		// core.bulk invokes arbitrary methods. Reachable, it would bypass the
+		// denylist, the write tier, and every other gate in this server.
+		prefix: "core.bulk",
+		reason: "it invokes arbitrary methods and would bypass this server's gating",
+	},
+	{
+		// Authentication is the server's to manage. A caller driving it could
+		// mint a token that outlives the session and is invisible in the API
+		// keys UI, which is a credential the operator never issued.
+		prefix: "auth.",
+		reason: "authentication is managed by this server, not by callers",
+	},
+	{
+		prefix: "core.subscribe",
+		reason: "event subscription is managed by this server",
+	},
+	{
+		prefix: "core.unsubscribe",
+		reason: "event subscription is managed by this server",
+	},
 }
 
 // DiscoveryError is a refusal from this server's gating rather than the target.
@@ -52,43 +82,39 @@ func (e *DiscoveryError) Error() string {
 // Refusals deliberately do not say whether the method exists on the target.
 // Confirming existence would turn discovery into an enumeration oracle for
 // exactly the methods that are being withheld.
-func CheckDiscoverable(method string, writesEnabled bool) error {
+func CheckDiscoverable(m MethodInfo, writesEnabled bool) error {
 	// The permanent denylist outranks everything, including writes being on.
-	if err := CheckDenied(method, nil); err != nil {
+	if err := CheckDenied(m.Name, nil); err != nil {
 		return err
 	}
 
-	// Write shapes are checked FIRST. Some mutating methods end in something
-	// that also reads as a read suffix — app.pull_images ends in "_images" —
-	// and matching reads first would let them through the gate. When the two
-	// sets overlap, the safer classification has to win.
-	if matchesAny(method, writeSuffixes) {
-		if !writesEnabled {
-			return &DiscoveryError{
-				Method: method,
-				Reason: "it mutates state and the write tier is disabled",
-			}
+	for _, x := range discoveryExclusions {
+		if strings.HasPrefix(m.Name, x.prefix) {
+			return &DiscoveryError{Method: m.Name, Reason: x.reason}
 		}
+	}
+
+	// A method declaring no roles has no privilege check at all. On this target
+	// those are session and protocol plumbing rather than harmless reads, so
+	// "no roles" is treated as unknown risk rather than no risk.
+	if len(m.Roles) == 0 {
+		return &DiscoveryError{
+			Method: m.Name,
+			Reason: "it declares no privilege requirement, so its effect cannot be established",
+		}
+	}
+
+	if slices.Contains(m.Roles, readOnlyRole) {
 		return nil
 	}
 
-	if matchesAny(method, readSuffixes) {
-		return nil
-	}
-
-	return &DiscoveryError{
-		Method: method,
-		Reason: "it matches no allowed method shape",
-	}
-}
-
-func matchesAny(method string, suffixes []string) bool {
-	for _, s := range suffixes {
-		if strings.HasSuffix(method, s) {
-			return true
+	if !writesEnabled {
+		return &DiscoveryError{
+			Method: m.Name,
+			Reason: "it mutates state and the write tier is disabled",
 		}
 	}
-	return false
+	return nil
 }
 
 // SummarizeSchema reduces a middleware argument schema to what a caller needs.

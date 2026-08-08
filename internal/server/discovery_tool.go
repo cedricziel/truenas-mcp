@@ -76,7 +76,7 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 			return nil, SearchOutput{}, err
 		}
 
-		all, err := methodNames(ctx, s)
+		all, err := allMethods(ctx, s)
 		if err != nil {
 			return nil, SearchOutput{}, err
 		}
@@ -88,13 +88,13 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 
 		var matched []string
 		hidden := 0
-		for _, name := range all {
+		for name, meta := range all {
 			if !strings.Contains(name, in.Query) {
 				continue
 			}
 			// Methods this server would refuse are not listed: offering them
 			// would just produce a refusal one turn later.
-			if tools.CheckDiscoverable(name, writesEnabled) != nil {
+			if tools.CheckDiscoverable(meta.info(name), writesEnabled) != nil {
 				hidden++
 				continue
 			}
@@ -127,10 +127,6 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 			"pass full=true for the complete schema.",
 		Annotations: readAnnotations("Describe a middleware method"),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in DescribeInput) (*mcp.CallToolResult, DescribeOutput, error) {
-		if err := tools.CheckDiscoverable(in.Method, writesEnabled); err != nil {
-			return toolError(err.Error()), DescribeOutput{}, nil
-		}
-
 		s, err := session(ctx)
 		if err != nil {
 			return nil, DescribeOutput{}, err
@@ -138,6 +134,9 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 
 		meta, err := methodMetadata(ctx, s, in.Method)
 		if err != nil {
+			return toolError(err.Error()), DescribeOutput{}, nil
+		}
+		if err := tools.CheckDiscoverable(meta.info(in.Method), writesEnabled); err != nil {
 			return toolError(err.Error()), DescribeOutput{}, nil
 		}
 
@@ -161,9 +160,6 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 		// knowable from here, so the caller should be asked.
 		Annotations: writeAnnotations("Call a middleware method directly", true, false),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in CallInput) (*mcp.CallToolResult, CallOutput, error) {
-		if err := tools.CheckDiscoverable(in.Method, writesEnabled); err != nil {
-			return toolError(err.Error()), CallOutput{}, nil
-		}
 		// Argument-level denials apply here too: the parameters are positional,
 		// so check any object among them.
 		for _, p := range in.Params {
@@ -181,6 +177,9 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 
 		meta, err := methodMetadata(ctx, s, in.Method)
 		if err != nil {
+			return toolError(err.Error()), CallOutput{}, nil
+		}
+		if err := tools.CheckDiscoverable(meta.info(in.Method), writesEnabled); err != nil {
 			return toolError(err.Error()), CallOutput{}, nil
 		}
 
@@ -234,6 +233,11 @@ type nestedParam struct {
 	Description string `json:"description"`
 	Required    bool   `json:"_required_"`
 	Default     any    `json:"default"`
+}
+
+// info projects the metadata this server gates on.
+func (m rawMethodMeta) info(name string) tools.MethodInfo {
+	return tools.MethodInfo{Name: name, Roles: m.Roles, Job: m.Job}
 }
 
 func (m rawMethodMeta) readOnly() bool {
@@ -308,18 +312,14 @@ func methodMetadata(ctx context.Context, s *Session, method string) (rawMethodMe
 	return meta, nil
 }
 
-func methodNames(ctx context.Context, s *Session) ([]string, error) {
+func allMethods(ctx context.Context, s *Session) (map[string]rawMethodMeta, error) {
 	raw, err := s.Client().Call(ctx, "core.get_methods")
 	if err != nil {
 		return nil, err
 	}
-	var all map[string]json.RawMessage
+	var all map[string]rawMethodMeta
 	if err := json.Unmarshal(raw, &all); err != nil {
 		return nil, fmt.Errorf("decoding method list: %w", err)
 	}
-	names := make([]string, 0, len(all))
-	for name := range all {
-		names = append(names, name)
-	}
-	return names, nil
+	return all, nil
 }
