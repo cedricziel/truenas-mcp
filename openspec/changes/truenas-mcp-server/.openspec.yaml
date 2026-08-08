@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-08
+goal: Expose TrueNAS SCALE to LLM clients through ~8 curated read tools plus an
+  allowlist-gated discovery tail, with writes opt-in and per-operation consent
