@@ -273,6 +273,31 @@ the design — they teach the filter syntax and ZFS semantics once instead of
 repeating them in every tool description, where the tokens would be paid on
 every request. A test asserts tool descriptions do not restate them.
 
+## Releases
+
+Releasing runs through [release-please](https://github.com/googleapis/release-please)
+and nowhere else. It reads the conventional-commit history on `main`, keeps a
+release PR open with the next version and changelog, and cutting a release is
+merging that PR.
+
+```
+push to main ──▶ ci.yml        test, lint, publish :main and :sha-<commit>
+             └─▶ release.yml   maintain the release PR
+                                  │
+                merge PR ─────────┴─▶ tag vX.Y.Z, GitHub release,
+                                      publish :X.Y.Z :X.Y :latest
+```
+
+`ci.yml` deliberately does not react to tags, so a version tag cannot appear
+without a release. The release job re-runs the tests against the tagged commit
+before publishing — the tag is a different commit from the one CI last checked,
+and a release is only as trustworthy as the tests that gated it.
+
+**Token.** Set a `RELEASE_PLEASE_TOKEN` repository secret to a PAT with
+`contents: write` and `pull-requests: write`. Without it the workflow falls back
+to `GITHUB_TOKEN`, which works but cannot trigger downstream workflows — so the
+release tag would not start the publish job.
+
 ## Development
 
 ```bash
