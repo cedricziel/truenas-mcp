@@ -146,7 +146,14 @@ was always an enhancement over it, and MCP client support for it is thin.
 | `server_info` | — |
 | `system_info` | — |
 
-All read-only, all annotated `readOnlyHint`. Every method behind them is
+Every tool declares a complete MCP annotation set — `title`, `readOnlyHint`,
+`destructiveHint`, `idempotentHint`, `openWorldHint`. The spec defaults for
+`destructiveHint` and `openWorldHint` are *true*, so an unset field does not
+mean "unknown", it means "assume the worst" — and a read tool treated as
+destructive produces prompts on safe operations, which is what teaches people
+to click through the prompts that matter.
+
+Every method behind the read tools is
 verified against the target's own RBAC metadata to grant `READONLY_ADMIN`,
 so "this tool cannot mutate" is checked rather than asserted.
 
