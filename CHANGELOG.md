@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/cedricziel/truenas-mcp/compare/v0.1.2...v0.2.0) (2026-08-08)
+
+
+### Features
+
+* serve MCP over stdio ([#9](https://github.com/cedricziel/truenas-mcp/issues/9)) ([81d1143](https://github.com/cedricziel/truenas-mcp/commit/81d1143cd490e0d258d51b3b75b0b553238ccbf0))
+
+
+### Build and Packaging
+
+* publish release binaries with GoReleaser ([#7](https://github.com/cedricziel/truenas-mcp/issues/7)) ([7deb012](https://github.com/cedricziel/truenas-mcp/commit/7deb01202c838745c7716d772ec305d6755a0d54))
+
 ## [0.1.2](https://github.com/cedricziel/truenas-mcp/compare/v0.1.1...v0.1.2) (2026-08-08)
 
 
