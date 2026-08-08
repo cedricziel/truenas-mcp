@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/cedricziel/truenas-mcp/compare/v0.1.1...v0.1.2) (2026-08-08)
+
+
+### Build and Packaging
+
+* drop the fields the registry rejects for OCI packages ([#5](https://github.com/cedricziel/truenas-mcp/issues/5)) ([630e17b](https://github.com/cedricziel/truenas-mcp/commit/630e17b23acf7ef3eb4b089614e7882a147994b6))
+
 ## [0.1.1](https://github.com/cedricziel/truenas-mcp/compare/v0.1.0...v0.1.1) (2026-08-08)
 
 
