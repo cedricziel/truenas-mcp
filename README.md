@@ -46,8 +46,8 @@ configuration, and it constrains argument values rather than just method names â
 deleting an app is recoverable, deleting it along with its volumes is not, and
 those are the same method.
 
-The full reasoning, including what was measured against a live box and which
-decisions that overturned, is in [`openspec/changes/truenas-mcp-server/`](openspec/changes/truenas-mcp-server/).
+Each of these was measured against a live box rather than reasoned about in the
+abstract, and several were overturned by what that measurement found.
 
 ## Requirements
 
@@ -396,9 +396,9 @@ TRUENAS_TEST_INSECURE=true \
 go test -tags=integration ./...
 ```
 
-This project is specified with [OpenSpec](https://github.com/Fission-AI/OpenSpec);
-`openspec/changes/truenas-mcp-server/` holds the proposal, design decisions,
-capability specs, and task breakdown.
+The behaviour this server is expected to hold to is written down as capability
+specs rather than inferred from the code, and each scenario in them is a test
+case in waiting.
 
 ## License
 
