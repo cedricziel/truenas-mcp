@@ -9,6 +9,23 @@
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.packages[*].version"
+        },
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.packages[*].identifier"
+        }
+      ],
       "changelog-sections": [
         {
           "type": "feat",
