@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/cedricziel/truenas-mcp/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -141,7 +140,7 @@ func shape(op string, raw json.RawMessage, limit int) DispatchOutput {
 		// Not a collection; pass the object through.
 		var single any
 		if err := json.Unmarshal(raw, &single); err != nil {
-			return DispatchOutput{Op: op, Result: fmt.Sprintf("%s", raw)}
+			return DispatchOutput{Op: op, Result: string(raw)}
 		}
 		return DispatchOutput{Op: op, Result: single}
 	}
