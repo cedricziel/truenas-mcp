@@ -15,15 +15,15 @@ Design decisions D5, D6, and D7 rest on assumptions taken from documentation and
 
 Per design D15, the delivery pipeline is exercised before any feature work. The server at the end of this group does nothing but start, validate configuration, and report health — but it does so from an image pulled off the registry and run on the target.
 
-- [ ] 2.1 Set up the Go module with `make lint` / `make format` / `make test` targets and the official MCP Go SDK as a dependency
-- [ ] 2.2 Choose and apply a project license, recording whether forking the GPL-3.0 official middleware client is acceptable per design D10
-- [ ] 2.3 Set up the test harness with unit tests and a separately-marked integration suite, keeping live-target credentials out of the repository
-- [ ] 2.4 Implement configuration loading from environment variables with fail-fast validation and the startup summary
-- [ ] 2.5 Implement the health signal
-- [ ] 2.6 Write the Dockerfile producing a minimal image running as a non-root user with no added capabilities
-- [ ] 2.7 Add the GitHub Actions workflow running build, test, and lint on every push
-- [ ] 2.8 Add image build and publication to GHCR, gated on tests and lint passing, with a moving tag on the default branch and an immutable tag on release tags
-- [ ] 2.9 Record the source commit in published image metadata and verify the image is pullable without registry credentials
+- [x] 2.1 Set up the Go module with `make lint` / `make format` / `make test` targets and the official MCP Go SDK as a dependency
+- [x] 2.2 Choose and apply a project license, recording whether forking the GPL-3.0 official middleware client is acceptable per design D10
+- [x] 2.3 Set up the test harness with unit tests and a separately-marked integration suite, keeping live-target credentials out of the repository
+- [x] 2.4 Implement configuration loading from environment variables with fail-fast validation and the startup summary
+- [x] 2.5 Implement the health signal
+- [x] 2.6 Write the Dockerfile producing a minimal image running as a non-root user with no added capabilities
+- [x] 2.7 Add the GitHub Actions workflow running build, test, and lint on every push
+- [x] 2.8 Add image build and publication to GHCR, gated on tests and lint passing, with a moving tag on the default branch and an immutable tag on release tags
+- [x] 2.9 Record the source commit in published image metadata and verify the image is pullable without registry credentials
 - [ ] 2.10 Pull the published image onto the target TrueNAS instance and verify it starts and reports health
 
 ## 3. Connection layer
