@@ -118,3 +118,53 @@ Critically, **`app.rollback` exists**. Design D12 asserted that a redeploy is "n
 | **D6** concern grouping | **Correct.** No `virt` namespace on 26; virtualization is `vm` / `container` / `lxc` / `docker`. |
 | **D12** write scope | **Revise.** App surface is richer than scoped, and `app.rollback` makes redeploy reversible. |
 | Minimum version | Target is 26; the 25.04 floor still stands but is untested here. |
+
+---
+
+# Implementation outcomes
+
+Recorded at the end of the build (task 13.7).
+
+## Design open questions, resolved
+
+- **Does `network` earn a place in the default read tier?** No. It was dropped;
+  the surface settled on `storage` / `system` / `apps` / `jobs`. Nothing has
+  wanted it.
+- **Should job resources expose intermediate percentages or only state
+  transitions?** Percentages. The live target reports smooth progress
+  (`RUNNING 20%` → `SUCCESS 100%`) at a volume that is not chatty.
+
+## Decisions the implementation overturned
+
+| Decision | What happened |
+|---|---|
+| **D5** allowlist as namespace patterns | Became patterns over *method shapes* (`.query`, `.create`). Write shapes must be matched **before** read shapes: `app.pull_images` ends in `_images`, which also reads as a read suffix, and matching reads first let it through the gate. |
+| **D7** summarise the argument schema | Correct in principle, wrong in level. Middleware methods take one object parameter wrapping the real arguments, so top-level summarising reduced nothing. Flattening into the object gives ~3.8× on `sharing.smb.create`. |
+| **D7** derive worked examples from `examples` | Only 34 of 815 methods populate it. Examples are constructed from required parameters instead. |
+| **D3/D5** hand-maintained read/write split | Replaced by the target's own `roles` metadata: a method is readable exactly when it grants `READONLY_ADMIN`. Asserted live for every read operation. |
+| **Connection spec** username + API key | Wrong. `auth.login_with_api_key` takes only the key; TrueNAS keys are user-linked. The requirement came from the Python client's README, not the middleware. |
+| **D6** `virt.*` namespace | Does not exist on TrueNAS 26; virtualization is `vm` / `container` / `lxc`. |
+| **D12** redeploy is "not cleanly reversible" | Wrong: `app.rollback` exists, which widened the v1 write scope rather than narrowing it. |
+
+## Bugs the tests caught
+
+- `outdated_images` declared a required parameter as optional, so calls without
+  it returned `null` — a silent wrong answer. Now derived from the target's
+  `_required_` flags in both directions.
+- Three `any`-typed output fields generated the bare `true` JSON Schema, which
+  Claude Code rejects during tool-list validation. Because a client that cannot
+  parse the list drops the whole server, three fields disabled all sixteen tools.
+- A recursive `SchemaParam` could not be expressed as an output schema at all.
+
+## Not implemented
+
+- **Job event subscription** (9.7, 9.8) and the event stream shape it depends on
+  (1.5). Polling is specified as the reliable path and is verified working; the
+  subscription was always designed as an enhancement over it.
+- **Negotiated auth mechanism reporting** (3.5). The target runs TrueNAS 26,
+  where SCRAM is the default and the key is not transmitted, so the reporting
+  this would add has no decision hanging on it today.
+- **Plaintext loopback revocation check** (3.15). Untested; the deployment does
+  not use a plaintext loopback hop.
+- **Two-user privilege verification** (4.8). The per-session credential path is
+  verified, but not with two TrueNAS users of differing privilege.

@@ -34,10 +34,10 @@ Per design D15, the delivery pipeline is exercised before any feature work. The 
 - [x] 3.4 Implement TLS enforcement and the two independent overrides — plaintext transport and certificate verification
 - [ ] 3.5 Implement negotiated-mechanism detection and startup reporting, covering both the key-transmitting mechanism and SCRAM
 - [x] 3.6 Implement authentication rate-limit handling distinct from invalid credentials
-- [ ] 3.7 Write failing tests for API version detection and refusal below the minimum supported release
-- [ ] 3.8 Implement version detection, pinning, and unsupported-release refusal
-- [ ] 3.9 Write failing tests for reconnection, backoff, and in-flight request interruption reporting
-- [ ] 3.10 Implement reconnection with backoff and interrupted-request error reporting
+- [x] 3.7 Write failing tests for API version detection and refusal below the minimum supported release
+- [x] 3.8 Implement version detection, pinning, and unsupported-release refusal
+- [x] 3.9 Write failing tests for reconnection, backoff, and in-flight request interruption reporting
+- [x] 3.10 Implement reconnection with backoff and interrupted-request error reporting
 - [x] 3.11 Implement structured connection errors distinguishing unreachable, unauthenticated, and unauthorized
 - [x] 3.12 Write failing tests for per-session connection isolation: no sharing across credentials, no unauthenticated connection path, no session-supplied target override
 - [x] 3.13 Implement per-session connection lifecycle with establish-once reuse and release on session close
@@ -49,8 +49,8 @@ Per design D15, the delivery pipeline is exercised before any feature work. The 
 - [x] 4.1 Write failing tests asserting the server holds no TrueNAS credential and refuses sessions that supply none
 - [x] 4.2 Implement the HTTP transport with a configurable bind address and port
 - [x] 4.3 Implement per-session credential extraction and middleware session establishment under the caller's identity
-- [ ] 4.4 Write failing tests for TLS enforcement on the MCP boundary and the explicit plaintext override with its warning
-- [ ] 4.5 Implement TLS enforcement on the MCP boundary
+- [x] 4.4 Write failing tests for TLS enforcement on the MCP boundary and the explicit plaintext override with its warning
+- [x] 4.5 Implement TLS enforcement on the MCP boundary
 - [x] 4.6 Write failing tests asserting a session cannot exceed its own credential's privileges and that no call is retried under another credential
 - [x] 4.7 Implement authorization failure reporting and mid-session revocation handling
 - [ ] 4.8 Verify against the live box with two TrueNAS users of differing privilege that each session sees only what its user may see
@@ -106,7 +106,7 @@ Build this before any tool exists, so no surface is ever added outside the gate.
 - [x] 9.3 Write failing tests for job status polling across running, succeeded, failed, and unknown states
 - [x] 9.4 Implement job status polling and the recent-jobs listing
 - [x] 9.5 Implement job resource URIs reporting state consistent with polling
-- [ ] 9.6 Verify a real long-running job on the live box is observable to completion by polling alone
+- [x] 9.6 Verify a real long-running job on the live box is observable to completion by polling alone
 - [ ] 9.7 Implement job event subscription mapped to resource update notifications, including the terminal-state notification
 - [ ] 9.8 Verify polling remains sufficient with subscription unsupported by the client
 
@@ -119,7 +119,7 @@ Build this before any tool exists, so no surface is ever added outside the gate.
 - [x] 10.5 Write failing tests for schema summarization: commonly-used fields, worked example, omitted-count, and the full-schema option
 - [x] 10.6 Implement `describe_method` with derived field selection per design D7
 - [x] 10.7 Implement `call_method`, distinguishing server refusals from target-reported failures and returning job identity for job-starting methods
-- [ ] 10.8 Verify against the live box that a method added outside the allowlist is unreachable
+- [x] 10.8 Verify against the live box that a method added outside the allowlist is unreachable
 
 ## 11. Write tier
 
@@ -132,7 +132,7 @@ Build this before any tool exists, so no surface is ever added outside the gate.
 - [x] 11.7 Implement the app upgrade tool
 - [x] 11.8 Implement the app rollback tool and assert it is present whenever any app mutation is
 - [x] 11.9 Assert app deletion is absent from v1 and that all v1 mutating tools disappear when the write tier is disabled
-- [ ] 11.10 Verify the `app.pull_images` redeploy workflow end to end against the live box
+- [x] 11.10 Verify the `app.pull_images` redeploy workflow end to end against the live box
 - [ ] 11.11 Verify rollback recovers an app after an upgrade on the live box
 
 ## 12. TrueNAS app installation
@@ -148,10 +148,10 @@ The image and pipeline already exist from group 2. This group installs it as a T
 
 ## 13. Ship
 
-- [ ] 13.1 Run the full integration suite against the live box
+- [x] 13.1 Run the full integration suite against the live box
 - [x] 13.2 Document configuration, per-user API key creation with least-privilege guidance, and the read-only default
 - [x] 13.3 Document the safety model: per-session credentials as the outer boundary, gating, denylist, and why consent is per-operation
 - [x] 13.4 Document the on-box availability trade-off and off-box deployment as the more robust option for troubleshooting
-- [ ] 13.5 Verify the server end-to-end in a real MCP client, including tool selection accuracy on common questions
-- [ ] 13.6 Run `make lint` and `make format`
-- [ ] 13.7 Record which design open questions the implementation resolved
+- [x] 13.5 Verify the server end-to-end in a real MCP client, including tool selection accuracy on common questions
+- [x] 13.6 Run `make lint` and `make format`
+- [x] 13.7 Record which design open questions the implementation resolved
