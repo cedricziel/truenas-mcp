@@ -131,6 +131,55 @@ func (m *SessionManager) Release(id string) {
 	}
 }
 
+// NewSessionProvider returns a sessionFor that opens the middleware
+// connection for apiKey lazily on first use and re-establishes it whenever
+// the existing one has gone dead.
+//
+// The target restarts, networks blip, and middleware connections are
+// long-lived. Re-establish rather than handing back a dead socket -- but
+// only when the existing one is genuinely gone, since the target
+// rate-limits authentication.
+//
+// id is the identifier the session is tracked under, so sessions can close
+// it later via Release or CloseAll. A caller that wants the connection
+// opened immediately -- to fail fast on a bad credential, say, rather than on
+// the first tool call -- can simply call the returned function once itself;
+// every call after that goes through the same lazy-open-then-reconnect path.
+// Both the HTTP transport (one provider per caller credential) and the stdio
+// transport (one provider for the process's single credential) share this.
+func NewSessionProvider(sessions *SessionManager, id, apiKey string) func(context.Context) (*Session, error) {
+	var (
+		once    sync.Once
+		mu      sync.Mutex
+		sess    *Session
+		sessErr error
+	)
+	return func(ctx context.Context) (*Session, error) {
+		once.Do(func() {
+			sess, sessErr = sessions.Open(ctx, apiKey)
+			if sessErr == nil {
+				sessions.Track(id, sess)
+			}
+		})
+		if sessErr != nil {
+			return nil, sessErr
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if sess != nil && !sess.Client().Alive() {
+			replacement, err := sessions.Open(ctx, apiKey)
+			if err != nil {
+				return nil, err
+			}
+			_ = sess.Close()
+			sess = replacement
+			sessions.Track(id, sess)
+		}
+		return sess, nil
+	}
+}
+
 // CloseAll releases every tracked session.
 func (m *SessionManager) CloseAll() {
 	m.mu.Lock()

@@ -27,6 +27,23 @@ const (
 	APIPath = "/api/current"
 )
 
+// Mode selects which transport the server serves on. Validation differs by
+// mode: the HTTP transport enforces TLS-or-explicit-plaintext and a bind
+// address, neither of which mean anything over stdio, and the credential
+// rules invert -- see validate.
+type Mode int
+
+const (
+	// ModeHTTP serves MCP over Streamable HTTP. The server holds no TrueNAS
+	// credential of its own; each caller supplies its own key per request.
+	ModeHTTP Mode = iota
+
+	// ModeStdio serves MCP over stdin/stdout. The process is spawned by a
+	// single client for a single user, so a server-wide credential is scoped
+	// to that user rather than to the server, and is therefore required.
+	ModeStdio
+)
+
 // Config is the validated server configuration.
 type Config struct {
 	// Target is the TrueNAS host, optionally with a port.
@@ -55,21 +72,39 @@ type Config struct {
 	// EnableWrites exposes the mutating tool tier. Off by default.
 	EnableWrites bool
 
+	// APIKey is the TrueNAS API key the process authenticates with in stdio
+	// mode. It has no meaning in HTTP mode -- see validate -- and is never
+	// included in Summary.
+	APIKey string
+
+	mode Mode
+
+	// listenSet records whether TRUENAS_MCP_LISTEN was explicitly set, before
+	// Load defaults it to DefaultListen. Only used to decide whether it is
+	// worth warning about in stdio mode, where it has no effect.
+	listenSet bool
+
 	warnings []string
 }
 
-// Load reads configuration through getenv and validates it. Passing getenv
-// rather than reading the process environment keeps tests free of global state.
-func Load(getenv func(string) string) (*Config, error) {
+// Load reads configuration through getenv and validates it against mode.
+// Passing getenv rather than reading the process environment keeps tests
+// free of global state.
+func Load(getenv func(string) string, mode Mode) (*Config, error) {
+	listen := strings.TrimSpace(getenv("TRUENAS_MCP_LISTEN"))
+
 	c := &Config{
 		Target:                   strings.TrimSpace(getenv("TRUENAS_MCP_TARGET")),
-		Listen:                   strings.TrimSpace(getenv("TRUENAS_MCP_LISTEN")),
+		Listen:                   listen,
+		listenSet:                listen != "",
 		TLSCertFile:              strings.TrimSpace(getenv("TRUENAS_MCP_TLS_CERT")),
 		TLSKeyFile:               strings.TrimSpace(getenv("TRUENAS_MCP_TLS_KEY")),
 		AllowPlaintext:           boolVar(getenv, "TRUENAS_MCP_ALLOW_PLAINTEXT"),
 		TargetInsecureSkipVerify: boolVar(getenv, "TRUENAS_MCP_TARGET_INSECURE"),
 		TargetAllowPlaintext:     boolVar(getenv, "TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT"),
 		EnableWrites:             boolVar(getenv, "TRUENAS_MCP_ENABLE_WRITES"),
+		APIKey:                   strings.TrimSpace(getenv("TRUENAS_MCP_API_KEY")),
+		mode:                     mode,
 	}
 
 	if c.Listen == "" {
@@ -90,6 +125,31 @@ func (c *Config) validate() error {
 	}
 	if err := validateHost(c.Target); err != nil {
 		return fmt.Errorf("TRUENAS_MCP_TARGET is not a usable host: %w", err)
+	}
+
+	if c.mode == ModeStdio {
+		// The process is spawned by one client for one user, so this key is
+		// scoped to that user rather than shared across every caller the way
+		// a server-wide HTTP credential would be. That is what makes it
+		// acceptable here and not over HTTP -- see the check below.
+		if c.APIKey == "" {
+			return fmt.Errorf(
+				"TRUENAS_MCP_API_KEY is required in stdio mode: set it to a TrueNAS API key. " +
+					"Create one in the TrueNAS UI under Credentials -> API Keys")
+		}
+		// TLS-or-plaintext and the bind address govern the HTTP transport's
+		// listener, which stdio mode never opens.
+		return nil
+	}
+
+	// The server holds no TrueNAS credential of its own in HTTP mode: each
+	// caller supplies its own key per request, and that credential's
+	// privilege level is the outer bound on what the session can reach. A
+	// server-wide key here would hollow that design out, so it is refused
+	// rather than silently honoured.
+	if c.APIKey != "" {
+		return fmt.Errorf(
+			"TRUENAS_MCP_API_KEY is only meaningful with --stdio: HTTP callers supply their own TrueNAS API key per request")
 	}
 
 	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
@@ -135,7 +195,22 @@ func validateHost(target string) error {
 }
 
 func (c *Config) collectWarnings() {
-	if !c.TLSEnabled() {
+	if c.mode == ModeStdio {
+		// These variables govern the HTTP transport's listener and MCP-boundary
+		// TLS, neither of which stdio mode uses. They are not errors -- unlike
+		// TRUENAS_MCP_API_KEY in HTTP mode, setting them does not weaken the
+		// credential model -- but an operator who set them likely expects them
+		// to matter, so surface it rather than silently ignoring it.
+		if c.listenSet {
+			c.warnings = append(c.warnings, "TRUENAS_MCP_LISTEN is set but has no effect in stdio mode")
+		}
+		if c.TLSCertFile != "" || c.TLSKeyFile != "" {
+			c.warnings = append(c.warnings, "TRUENAS_MCP_TLS_CERT/TRUENAS_MCP_TLS_KEY are set but have no effect in stdio mode")
+		}
+		if c.AllowPlaintext {
+			c.warnings = append(c.warnings, "TRUENAS_MCP_ALLOW_PLAINTEXT is set but has no effect in stdio mode")
+		}
+	} else if !c.TLSEnabled() {
 		c.warnings = append(c.warnings,
 			"serving MCP over plaintext: caller API keys are transmitted in the clear and TrueNAS may revoke them")
 	}
@@ -174,15 +249,19 @@ func (c *Config) Warnings() []string {
 }
 
 // Summary is the one-line startup posture report: what it talks to, how it
-// serves, and whether mutation is possible.
+// serves, and whether mutation is possible. It never includes APIKey: this
+// is logged at startup, and the key must not end up in a log line.
 func (c *Config) Summary() string {
-	tls := "off"
-	if c.TLSEnabled() {
-		tls = "on"
-	}
 	writes := "disabled"
 	if c.EnableWrites {
 		writes = "enabled"
+	}
+	if c.mode == ModeStdio {
+		return fmt.Sprintf("target=%s transport=stdio writes=%s", c.Target, writes)
+	}
+	tls := "off"
+	if c.TLSEnabled() {
+		tls = "on"
 	}
 	return fmt.Sprintf("target=%s listen=%s transport=http tls=%s writes=%s",
 		c.Target, c.Listen, tls, writes)

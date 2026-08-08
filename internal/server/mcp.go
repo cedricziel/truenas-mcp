@@ -190,41 +190,8 @@ func (h *mcpHandler) handlerFor(apiKey string) http.Handler {
 	}
 
 	// One lazily-established middleware connection per credential, reused for
-	// every tool call that credential makes.
-	var (
-		once    sync.Once
-		sess    *Session
-		sessErr error
-	)
-	var mu sync.Mutex
-	provider := func(ctx context.Context) (*Session, error) {
-		once.Do(func() {
-			sess, sessErr = h.cfg.Sessions.Open(ctx, apiKey)
-			if sessErr == nil {
-				h.cfg.Sessions.Track(id, sess)
-			}
-		})
-		if sessErr != nil {
-			return nil, sessErr
-		}
-
-		// The target restarts, networks blip, and middleware connections are
-		// long-lived. Re-establish rather than handing back a dead socket --
-		// but only when the existing one is genuinely gone, since the target
-		// rate-limits authentication.
-		mu.Lock()
-		defer mu.Unlock()
-		if sess != nil && !sess.Client().Alive() {
-			replacement, err := h.cfg.Sessions.Open(ctx, apiKey)
-			if err != nil {
-				return nil, err
-			}
-			_ = sess.Close()
-			sess = replacement
-			h.cfg.Sessions.Track(id, sess)
-		}
-		return sess, nil
-	}
+	// every tool call that credential makes, and re-established if it dies.
+	provider := NewSessionProvider(h.cfg.Sessions, id, apiKey)
 
 	srv := NewMCPServer(h.cfg, provider)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
