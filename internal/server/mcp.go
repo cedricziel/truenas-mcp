@@ -80,6 +80,13 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		for _, concern := range tools.ReadConcerns() {
 			registerConcern(srv, concern, session, readOnly)
 		}
+		registerJobs(srv, session)
+
+		// The tool list is the policy: with the write tier disabled there is
+		// no mutating tool to call, not merely one that refuses.
+		if cfg.EnableWrites {
+			registerWrites(srv, session)
+		}
 
 		mcp.AddTool(srv, &mcp.Tool{
 			Name: "system_info",
