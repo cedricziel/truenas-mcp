@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/cedricziel/truenas-mcp/compare/v0.1.0...v0.1.1) (2026-08-08)
+
+
+### Build and Packaging
+
+* describe the server for the MCP registry ([#3](https://github.com/cedricziel/truenas-mcp/issues/3)) ([d7e2afb](https://github.com/cedricziel/truenas-mcp/commit/d7e2afb3dcaa32eb74812034262bb704e704f4ca))
+
 ## 0.1.0 (2026-08-08)
 
 
