@@ -143,7 +143,8 @@ so "this tool cannot mutate" is checked rather than asserted.
 The `apps` operations `outdated_images`, `upgrade_summary`, and
 `rollback_versions` exist so a caller can decide *whether* to act before the
 write tier can act — a mutation surface without them forces the model to
-guess.
+guess. All three take an app `name`; the middleware has no fleet-wide
+equivalent.
 
 **On app logs:** TrueNAS 26 exposes no JSON-RPC method that returns container
 log output — the web UI streams it over a separate channel. `apps containers`
