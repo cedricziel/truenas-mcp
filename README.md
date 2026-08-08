@@ -3,8 +3,9 @@
 An MCP server for TrueNAS SCALE. Read-first, deployable as a TrueNAS app, and
 authenticated with each user's own API key.
 
-> **Status: early.** The read surface is still being built. See
-> [Current state](#current-state) for what works today.
+> **Status: early but complete in shape.** Every capability in the design is
+> implemented; expect rough edges rather than gaps. See
+> [Current state](#current-state).
 
 ## Why this exists
 
@@ -204,7 +205,29 @@ classifications overlap the safer one has to win.
 less accurately than small dense ones, so a faithful dump costs more and works
 worse. Pass `full=true` when you really want it.
 
-Not yet built: MCP resources.
+### Resources
+
+| URI | Content |
+|---|---|
+| `truenas://alerts` | current alerts |
+| `truenas://system/health` | version, hostname, uptime, hardware |
+| `truenas://pools` | pools with capacity and health |
+| `truenas://apps` | installed apps and their state |
+| `truenas://job/{id}` | a long-running operation's progress |
+| `truenas://docs/query-filters` | filter syntax for `call_method` |
+| `truenas://docs/dataset-properties` | ZFS field meanings and inheritance |
+
+Resources differ from tools by *control locus*, not cost: tools are
+model-controlled, resources are what a person attaches. They pay off when a
+human points at one — no round trip, no tool budget — and underperform when a
+model has to go find them, since model-driven resource access routes through
+generic list/read tools and reintroduces the round trips it was meant to avoid.
+
+So: addressable entities and reference material here, anything computed or
+parameterised stays a tool. The documentation resources are the best value in
+the design — they teach the filter syntax and ZFS semantics once instead of
+repeating them in every tool description, where the tokens would be paid on
+every request. A test asserts tool descriptions do not restate them.
 
 ## Development
 
