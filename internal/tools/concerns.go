@@ -110,10 +110,11 @@ func Apps() *Concern {
 				Required: []string{"name"},
 			},
 			{
-				Name:    "outdated_images",
-				Summary: "which apps are running images that are out of date",
-				Method:  "app.outdated_docker_images",
-				Args:    []string{"name"},
+				Name:     "outdated_images",
+				Summary:  "whether one app is running images that are out of date",
+				Method:   "app.outdated_docker_images",
+				Args:     []string{"name"},
+				Required: []string{"name"},
 			},
 			{
 				Name:     "upgrade_summary",
