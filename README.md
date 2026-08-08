@@ -132,7 +132,7 @@ Working:
 |---|---|
 | `storage` | `list_pools`, `show_pool`, `list_datasets`, `show_dataset`, `list_snapshots` |
 | `system` | `info`, `alerts`, `list_services`, `update_status` |
-| `apps` | `list`, `show`, `config`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
+| `apps` | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
 | `server_info` | — |
 | `system_info` | — |
 
@@ -144,6 +144,11 @@ The `apps` operations `outdated_images`, `upgrade_summary`, and
 `rollback_versions` exist so a caller can decide *whether* to act before the
 write tier can act — a mutation surface without them forces the model to
 guess.
+
+**On app logs:** TrueNAS 26 exposes no JSON-RPC method that returns container
+log output — the web UI streams it over a separate channel. `apps containers`
+returns the container identities such a transport would need, and is useful on
+its own. Log streaming is tracked as future work.
 
 Not yet built: the app lifecycle write tier, method discovery, resources, and
 job tracking.
