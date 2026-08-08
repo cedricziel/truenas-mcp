@@ -13,7 +13,6 @@
 services:
   truenas-mcp:
     image: ghcr.io/cedricziel/truenas-mcp:main
-    container_name: truenas-mcp
     restart: unless-stopped
 
     ports:

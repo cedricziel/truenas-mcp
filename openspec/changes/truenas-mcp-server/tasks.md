@@ -24,7 +24,7 @@ Per design D15, the delivery pipeline is exercised before any feature work. The 
 - [x] 2.7 Add the GitHub Actions workflow running build, test, and lint on every push
 - [x] 2.8 Add image build and publication to GHCR, gated on tests and lint passing, with a moving tag on the default branch and an immutable tag on release tags
 - [x] 2.9 Record the source commit in published image metadata and verify the image is pullable without registry credentials
-- [ ] 2.10 Pull the published image onto the target TrueNAS instance and verify it starts and reports health
+- [x] 2.10 Pull the published image onto the target TrueNAS instance and verify it starts and reports health
 
 ## 3. Connection layer
 
@@ -139,10 +139,10 @@ Build this before any tool exists, so no surface is ever added outside the gate.
 
 The image and pipeline already exist from group 2. This group installs it as a TrueNAS app and verifies the end-to-end path.
 
-- [ ] 12.1 Extend the startup summary to report target address, transport and TLS state, and write-tier state
+- [x] 12.1 Extend the startup summary to report target address, transport and TLS state, and write-tier state
 - [ ] 12.2 Extend the health signal to reflect target reachability
-- [ ] 12.3 Author the TrueNAS custom-app Compose definition with a top-level `services` key, mounting no host socket and requesting no privileged access
-- [ ] 12.4 Install the Compose definition on the live TrueNAS instance through Apps → Install via YAML and verify the server is reachable from another machine
+- [x] 12.3 Author the TrueNAS custom-app Compose definition with a top-level `services` key, mounting no host socket and requesting no privileged access
+- [x] 12.4 Install the Compose definition on the live TrueNAS instance through Apps → Install via YAML and verify the server is reachable from another machine
 - [ ] 12.5 Connect a real MCP client to the deployed container over TLS and verify an end-to-end tool call
 - [ ] 12.6 Verify the app survives a restart and an image tag update
 
