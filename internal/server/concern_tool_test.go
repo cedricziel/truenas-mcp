@@ -12,13 +12,9 @@ import (
 // the client's own validation before it ever reaches the server, so this
 // mismatch is invisible until someone tries the tool.
 func TestDispatchInputCarriesEveryDeclaredArgument(t *testing.T) {
-	raw, err := json.Marshal(DispatchInput{})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	// Marshal with all fields present so omitempty does not hide them.
+	// Every field populated, so omitempty does not hide any of them.
 	full := DispatchInput{Op: "x", ID: "x", Name: "x", Pool: "x", Dataset: "x", Path: "x", Limit: 1}
-	raw, err = json.Marshal(full)
+	raw, err := json.Marshal(full)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
