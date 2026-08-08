@@ -59,79 +59,79 @@ Per design D15, the delivery pipeline is exercised before any feature work. The 
 
 Both the read tools and the resource surface project from this. Build it once.
 
-- [ ] 5.1 Write failing tests for result shaping and the truncation contract, including reported total counts
-- [ ] 5.2 Implement the read layer with per-concern accessors, result shaping, and bounded results
-- [ ] 5.3 Write failing tests for authorization failures surfacing distinctly from operation failures
-- [ ] 5.4 Implement distinct authorization error reporting
+- [x] 5.1 Write failing tests for result shaping and the truncation contract, including reported total counts
+- [x] 5.2 Implement the read layer with per-concern accessors, result shaping, and bounded results
+- [x] 5.3 Write failing tests for authorization failures surfacing distinctly from operation failures
+- [x] 5.4 Implement distinct authorization error reporting
 
 ## 6. Safety machinery
 
 Build this before any tool exists, so no surface is ever added outside the gate.
 
-- [ ] 6.1 Write failing tests asserting denylisted operations are unreachable under the broadest configuration
-- [ ] 6.2 Implement the unrecoverable-operation denylist as a non-configurable constant
-- [ ] 6.3 Write failing tests asserting configuration naming a denylisted operation is refused and reported at startup
-- [ ] 6.4 Implement write-tier configuration gating with startup reporting of the exposed surface
-- [ ] 6.5 Implement the CI assertion that every operation in a read tool's dispatch table is non-mutating, per design D3 and the read-tools annotation requirement
-- [ ] 6.6 Verify the build fails when a mutating operation is added to a read tool
+- [x] 6.1 Write failing tests asserting denylisted operations are unreachable under the broadest configuration
+- [x] 6.2 Implement the unrecoverable-operation denylist as a non-configurable constant
+- [x] 6.3 Write failing tests asserting configuration naming a denylisted operation is refused and reported at startup
+- [x] 6.4 Implement write-tier configuration gating with startup reporting of the exposed surface
+- [x] 6.5 Implement the CI assertion that every operation in a read tool's dispatch table is non-mutating, per design D3 and the read-tools annotation requirement
+- [x] 6.6 Verify the build fails when a mutating operation is added to a read tool
 
 ## 7. Read tools
 
-- [ ] 7.1 Write failing tests for dispatch: strict `op` enum, unknown-operation errors listing valid operations
-- [ ] 7.2 Implement the dispatch mechanism with the flat optional argument superset
-- [ ] 7.3 Write failing tests for missing-argument and irrelevant-argument errors naming the correct arguments per operation
-- [ ] 7.4 Implement per-operation argument relevance validation
-- [ ] 7.5 Implement the `storage` tool (pools, datasets, snapshots, capacity)
-- [ ] 7.6 Implement the `system` tool (health, alerts, version, updates)
-- [ ] 7.7 Implement the `sharing` tool, SMB and NFS list/show only per the enum-width risk in design
-- [ ] 7.8 Implement the `apps` tool (list, show, config, outdated images, upgrade summary, rollback versions, used ports)
-- [ ] 7.9 Implement the `jobs` tool (list, show) — see task group 9
-- [ ] 7.10 Apply `readOnlyHint` annotations to all read tools
-- [ ] 7.11 Assert the default tool count stays within the ten-tool bound
-- [ ] 7.12 Verify every read operation against the live box
+- [x] 7.1 Write failing tests for dispatch: strict `op` enum, unknown-operation errors listing valid operations
+- [x] 7.2 Implement the dispatch mechanism with the flat optional argument superset
+- [x] 7.3 Write failing tests for missing-argument and irrelevant-argument errors naming the correct arguments per operation
+- [x] 7.4 Implement per-operation argument relevance validation
+- [x] 7.5 Implement the `storage` tool (pools, datasets, snapshots, capacity)
+- [x] 7.6 Implement the `system` tool (health, alerts, version, updates)
+- [x] 7.7 Implement the `sharing` tool, SMB and NFS list/show only per the enum-width risk in design
+- [x] 7.8 Implement the `apps` tool (list, show, config, outdated images, upgrade summary, rollback versions, used ports)
+- [x] 7.9 Implement the `jobs` tool (list, show) — see task group 9
+- [x] 7.10 Apply `readOnlyHint` annotations to all read tools
+- [x] 7.11 Assert the default tool count stays within the ten-tool bound
+- [x] 7.12 Verify every read operation against the live box
 
 ## 8. Resources
 
-- [ ] 8.1 Write failing tests for entity resource URIs, including the absent-entity error
-- [ ] 8.2 Implement entity resources for pools, apps, app logs, and alerts, projecting from the shared read layer
-- [ ] 8.3 Author the filter-syntax and ZFS-property documentation resources
-- [ ] 8.4 Strip filter and property explanations from tool descriptions and point them at the documentation resources
-- [ ] 8.5 Write and satisfy tests asserting resource and read-tool surfaces report consistent content
-- [ ] 8.6 Assert no resource exposes data the read tier would refuse
+- [x] 8.1 Write failing tests for entity resource URIs, including the absent-entity error
+- [x] 8.2 Implement entity resources for pools, apps, app logs, and alerts, projecting from the shared read layer
+- [x] 8.3 Author the filter-syntax and ZFS-property documentation resources
+- [x] 8.4 Strip filter and property explanations from tool descriptions and point them at the documentation resources
+- [x] 8.5 Write and satisfy tests asserting resource and read-tool surfaces report consistent content
+- [x] 8.6 Assert no resource exposes data the read tier would refuse
 
 ## 9. Job tracking
 
-- [ ] 9.1 Write failing tests asserting job-starting operations return without waiting for completion
-- [ ] 9.2 Implement non-blocking job initiation returning job identity and resource URI
-- [ ] 9.3 Write failing tests for job status polling across running, succeeded, failed, and unknown states
-- [ ] 9.4 Implement job status polling and the recent-jobs listing
-- [ ] 9.5 Implement job resource URIs reporting state consistent with polling
+- [x] 9.1 Write failing tests asserting job-starting operations return without waiting for completion
+- [x] 9.2 Implement non-blocking job initiation returning job identity and resource URI
+- [x] 9.3 Write failing tests for job status polling across running, succeeded, failed, and unknown states
+- [x] 9.4 Implement job status polling and the recent-jobs listing
+- [x] 9.5 Implement job resource URIs reporting state consistent with polling
 - [ ] 9.6 Verify a real long-running job on the live box is observable to completion by polling alone
 - [ ] 9.7 Implement job event subscription mapped to resource update notifications, including the terminal-state notification
 - [ ] 9.8 Verify polling remains sufficient with subscription unsupported by the client
 
 ## 10. Method discovery
 
-- [ ] 10.1 Write failing tests asserting non-allowlisted methods are neither describable nor callable, and that description does not leak their arguments
-- [ ] 10.2 Implement the namespace-pattern allowlist
-- [ ] 10.3 Write failing tests asserting discovery honors write-tier gating and the denylist
-- [ ] 10.4 Implement gating enforcement on the discovery path
-- [ ] 10.5 Write failing tests for schema summarization: commonly-used fields, worked example, omitted-count, and the full-schema option
-- [ ] 10.6 Implement `describe_method` with derived field selection per design D7
-- [ ] 10.7 Implement `call_method`, distinguishing server refusals from target-reported failures and returning job identity for job-starting methods
+- [x] 10.1 Write failing tests asserting non-allowlisted methods are neither describable nor callable, and that description does not leak their arguments
+- [x] 10.2 Implement the namespace-pattern allowlist
+- [x] 10.3 Write failing tests asserting discovery honors write-tier gating and the denylist
+- [x] 10.4 Implement gating enforcement on the discovery path
+- [x] 10.5 Write failing tests for schema summarization: commonly-used fields, worked example, omitted-count, and the full-schema option
+- [x] 10.6 Implement `describe_method` with derived field selection per design D7
+- [x] 10.7 Implement `call_method`, distinguishing server refusals from target-reported failures and returning job identity for job-starting methods
 - [ ] 10.8 Verify against the live box that a method added outside the allowlist is unreachable
 
 ## 11. Write tier
 
-- [ ] 11.1 Write failing tests asserting no mutating tool is exposed by default and that no schema can enable the write tier
-- [ ] 11.2 Write failing tests for target resolution: refusal on ambiguous or absent identifiers before any mutation is attempted
-- [ ] 11.3 Implement target resolution and reporting of the resolved object
-- [ ] 11.4 Implement the snapshot creation tool with accurate annotations
-- [ ] 11.5 Implement the app pull-images tool with redeploy defaulting to enabled, returning a job identity
-- [ ] 11.6 Implement the app redeploy, start, and stop tools
-- [ ] 11.7 Implement the app upgrade tool
-- [ ] 11.8 Implement the app rollback tool and assert it is present whenever any app mutation is
-- [ ] 11.9 Assert app deletion is absent from v1 and that all v1 mutating tools disappear when the write tier is disabled
+- [x] 11.1 Write failing tests asserting no mutating tool is exposed by default and that no schema can enable the write tier
+- [x] 11.2 Write failing tests for target resolution: refusal on ambiguous or absent identifiers before any mutation is attempted
+- [x] 11.3 Implement target resolution and reporting of the resolved object
+- [x] 11.4 Implement the snapshot creation tool with accurate annotations
+- [x] 11.5 Implement the app pull-images tool with redeploy defaulting to enabled, returning a job identity
+- [x] 11.6 Implement the app redeploy, start, and stop tools
+- [x] 11.7 Implement the app upgrade tool
+- [x] 11.8 Implement the app rollback tool and assert it is present whenever any app mutation is
+- [x] 11.9 Assert app deletion is absent from v1 and that all v1 mutating tools disappear when the write tier is disabled
 - [ ] 11.10 Verify the `app.pull_images` redeploy workflow end to end against the live box
 - [ ] 11.11 Verify rollback recovers an app after an upgrade on the live box
 
@@ -140,18 +140,18 @@ Build this before any tool exists, so no surface is ever added outside the gate.
 The image and pipeline already exist from group 2. This group installs it as a TrueNAS app and verifies the end-to-end path.
 
 - [x] 12.1 Extend the startup summary to report target address, transport and TLS state, and write-tier state
-- [ ] 12.2 Extend the health signal to reflect target reachability
+- [x] 12.2 Extend the health signal to reflect target reachability
 - [x] 12.3 Author the TrueNAS custom-app Compose definition with a top-level `services` key, mounting no host socket and requesting no privileged access
 - [x] 12.4 Install the Compose definition on the live TrueNAS instance through Apps → Install via YAML and verify the server is reachable from another machine
 - [x] 12.5 Connect a real MCP client to the deployed container over TLS and verify an end-to-end tool call
-- [ ] 12.6 Verify the app survives a restart and an image tag update
+- [x] 12.6 Verify the app survives a restart and an image tag update
 
 ## 13. Ship
 
 - [ ] 13.1 Run the full integration suite against the live box
-- [ ] 13.2 Document configuration, per-user API key creation with least-privilege guidance, and the read-only default
-- [ ] 13.3 Document the safety model: per-session credentials as the outer boundary, gating, denylist, and why consent is per-operation
-- [ ] 13.4 Document the on-box availability trade-off and off-box deployment as the more robust option for troubleshooting
+- [x] 13.2 Document configuration, per-user API key creation with least-privilege guidance, and the read-only default
+- [x] 13.3 Document the safety model: per-session credentials as the outer boundary, gating, denylist, and why consent is per-operation
+- [x] 13.4 Document the on-box availability trade-off and off-box deployment as the more robust option for troubleshooting
 - [ ] 13.5 Verify the server end-to-end in a real MCP client, including tool selection accuracy on common questions
 - [ ] 13.6 Run `make lint` and `make format`
 - [ ] 13.7 Record which design open questions the implementation resolved

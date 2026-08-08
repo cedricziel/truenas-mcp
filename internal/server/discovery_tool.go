@@ -52,7 +52,7 @@ type CallInput struct {
 type CallOutput struct {
 	Method string `json:"method"`
 	JobID  int64  `json:"job_id,omitempty" jsonschema:"set when the method started a job rather than returning a result"`
-	Result any    `json:"result,omitempty"`
+	Result any    `json:"result,omitempty" jsonschema:"the method's return value, whatever shape it has"`
 	Note   string `json:"note,omitempty"`
 }
 

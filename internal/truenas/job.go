@@ -20,7 +20,7 @@ type Job struct {
 	Percent     float64 `json:"percent,omitempty"`
 	Description string  `json:"description,omitempty"`
 	Error       string  `json:"error,omitempty"`
-	Result      any     `json:"result,omitempty"`
+	Result      any     `json:"result,omitempty" jsonschema:"the job's return value, present once it succeeds"`
 }
 
 // Done reports whether the job has reached a terminal state.

@@ -124,7 +124,7 @@ type SchemaParam struct {
 	Type        string `json:"type,omitempty"`
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required"`
-	Default     any    `json:"default,omitempty"`
+	Default     any    `json:"default,omitempty" jsonschema:"the value used when this argument is omitted"`
 }
 
 // SchemaSummary is a reduced argument schema plus what was left out.
