@@ -108,6 +108,16 @@ func Apps() *Concern {
 				Name:    "list",
 				Summary: "installed apps with their state",
 				Method:  "app.query",
+				// These answer the three things this concern claims to cover:
+				// what is installed, what state it is in, and what needs
+				// updating. The last is not optional -- a summary that cannot
+				// answer it sends the caller back for the full object to learn
+				// what the first call already knew. Everything else app.query
+				// returns is detail that show and the lifecycle ops below
+				// cover on demand, and returning it by default is what blew a
+				// caller's token budget: one app object is roughly 4KB, almost
+				// all of it active_workloads.
+				Project: []string{"name", "state", "version", "upgrade_available", "image_updates_available"},
 			},
 			{
 				Name:     "show",
