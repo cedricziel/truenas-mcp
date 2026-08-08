@@ -84,11 +84,26 @@ type writeInput interface {
 // because the operation has not finished: it carries the identity needed to
 // watch it.
 type JobStartedOutput struct {
-	JobID    int64  `json:"job_id" jsonschema:"the job started on the target"`
+	JobID    int64  `json:"job_id" jsonschema:"the job just started on the target; the call does not wait for it to finish"`
 	Method   string `json:"method" jsonschema:"the middleware method invoked"`
 	Target   string `json:"target" jsonschema:"the object acted upon"`
 	Resource string `json:"resource" jsonschema:"resource URI tracking this job"`
 	Note     string `json:"note" jsonschema:"how to follow the job to completion"`
+}
+
+// asyncContractNote is appended to every write tool's description. Composing
+// it once here, rather than editing it into each WriteOp.Description by hand,
+// is what keeps a dozen descriptions saying the same thing without drifting:
+// the alternative is a phrase that a future op author paraphrases slightly
+// differently, or forgets. The op descriptions stay focused on the decision
+// ("this is how you update an app that tracks a moving tag"); this sentence
+// documents the mechanism they all share.
+const asyncContractNote = "Starts an asynchronous job and returns its id " +
+	"immediately rather than a finished result; follow it with " +
+	"jobs(op=\"show\", job_id=...) to see it complete."
+
+func withAsyncContractNote(description string) string {
+	return description + " " + asyncContractNote
 }
 
 // registerWrites exposes the mutating tier. Each operation becomes its own
@@ -125,7 +140,7 @@ func registerWrite(srv *mcp.Server, w tools.WriteOp, session sessionFor) {
 func registerWriteOp[In writeInput](srv *mcp.Server, w tools.WriteOp, session sessionFor) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        w.Name,
-		Description: w.Description,
+		Description: withAsyncContractNote(w.Description),
 		Annotations: writeAnnotations(w.Title, w.Destructive, w.Idempotent),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, JobStartedOutput, error) {
 		target := in.target()

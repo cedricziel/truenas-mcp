@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/cedricziel/truenas-mcp/internal/tools"
@@ -68,4 +69,30 @@ func schemaProperties(t *testing.T, toolName string, schema any) map[string]any 
 		t.Fatalf("%s: decode schema: %v", toolName, err)
 	}
 	return decoded.Properties
+}
+
+// A model decides whether to call a mutating tool before it sees the result,
+// so the fact that the call is asynchronous -- it returns a job id, not a
+// finished result, and needs a follow-up call to see completion -- has to be
+// visible in the description at that point. It used to only be discoverable
+// in the response, after the call already happened.
+func TestWriteDescriptionsStateTheAsyncContract(t *testing.T) {
+	srv := NewMCPServer(MCPConfig{Version: "t", Target: "nas", EnableWrites: true}, stubSession)
+	all := registeredTools(t, srv)
+
+	for _, w := range tools.WriteOps() {
+		tool, ok := all[w.Name]
+		if !ok {
+			t.Errorf("%s is missing", w.Name)
+			continue
+		}
+		if !strings.Contains(tool.Description, asyncContractNote) {
+			t.Errorf("%s description doesn't state the async contract: %q", w.Name, tool.Description)
+		}
+		// The per-op description must still be there, not replaced by the
+		// suffix -- the suffix documents the mechanism, not the decision.
+		if !strings.HasPrefix(tool.Description, w.Description) {
+			t.Errorf("%s: async suffix must be appended, not substituted for the op's own description", w.Name)
+		}
+	}
 }
