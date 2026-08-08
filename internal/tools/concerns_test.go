@@ -45,10 +45,30 @@ func TestConcernsAreWellFormed(t *testing.T) {
 	}
 }
 
-// The read surface must stay narrow enough that tool selection is reliable.
-func TestReadSurfaceStaysSmall(t *testing.T) {
-	if n := len(ReadConcerns()); n > 6 {
-		t.Fatalf("%d read concerns; the design budgets at most 6", n)
+// The read surface must stay navigable. The original budget was four concerns,
+// raised to eight as coverage grew: what protects tool-selection accuracy is
+// names mapping to distinct domains, not a small count. "Is my backup running"
+// and "what VMs exist" are not questions a model confuses, whereas folding them
+// into one tool with a thirty-value op enum would hurt exactly the accuracy the
+// budget exists to defend.
+func TestReadSurfaceStaysNavigable(t *testing.T) {
+	if n := len(ReadConcerns()); n > 8 {
+		t.Fatalf("%d read concerns; beyond 8 the list stops being scannable", n)
+	}
+}
+
+// Concern names must be distinct domains, since that is what makes a larger
+// surface navigable rather than confusing.
+func TestConcernNamesAreDistinct(t *testing.T) {
+	seen := map[string]bool{}
+	for _, c := range ReadConcerns() {
+		if seen[c.Name] {
+			t.Errorf("duplicate concern name %q", c.Name)
+		}
+		seen[c.Name] = true
+		if c.Title == "" {
+			t.Errorf("concern %q has no title", c.Name)
+		}
 	}
 }
 

@@ -79,6 +79,17 @@ func System() *Concern {
 				Summary: "whether a TrueNAS update is available",
 				Method:  "update.status",
 			},
+			{
+				Name:    "version",
+				Summary: "the exact TrueNAS release running",
+				Method:  "system.version",
+			},
+			{
+				Name:    "audit_log",
+				Summary: "recent audited actions, for seeing what changed on the system",
+				Method:  "audit.query",
+				Args:    []string{"limit"},
+			},
 		},
 	}
 }
@@ -154,7 +165,122 @@ func Apps() *Concern {
 	}
 }
 
+// Virtualization answers "what else is running on this box" — TrueNAS spreads
+// that across vm, container, and lxc as separate namespaces, but to a person
+// they are one question.
+func Virtualization() *Concern {
+	return &Concern{
+		Name:        "virtualization",
+		Title:       "Virtual machines and system containers",
+		Description: "Read virtual machines and system containers on the TrueNAS target.",
+		Ops: []Op{
+			{Name: "list_vms", Summary: "virtual machines and their state", Method: "vm.query"},
+			{
+				Name: "show_vm", Summary: "one virtual machine in full",
+				Method: "vm.get_instance", Args: []string{"id"}, Required: []string{"id"},
+			},
+			{Name: "vm_devices", Summary: "devices attached to virtual machines", Method: "vm.device.query"},
+			{Name: "list_containers", Summary: "system containers and their state", Method: "container.query"},
+			{
+				Name: "show_container", Summary: "one system container in full",
+				Method: "container.get_instance", Args: []string{"id"}, Required: []string{"id"},
+			},
+			{Name: "container_devices", Summary: "devices attached to containers", Method: "container.device.query"},
+		},
+	}
+}
+
+// Sharing answers "who can reach my files". SMB, NFS, and web shares have
+// almost nothing in common structurally, but they answer one user concern.
+func Sharing() *Concern {
+	return &Concern{
+		Name:        "sharing",
+		Title:       "File shares: SMB, NFS, web",
+		Description: "Read the shares exposing this system's data, and who can reach them.",
+		Ops: []Op{
+			{Name: "list_smb", Summary: "SMB shares", Method: "sharing.smb.query"},
+			{
+				Name: "show_smb", Summary: "one SMB share in full",
+				Method: "sharing.smb.get_instance", Args: []string{"id"}, Required: []string{"id"},
+			},
+			{
+				Name: "smb_acl", Summary: "who may access an SMB share",
+				Method: "sharing.smb.getacl", Args: []string{"id"}, Required: []string{"id"},
+			},
+			{Name: "list_nfs", Summary: "NFS exports", Method: "sharing.nfs.query"},
+			{
+				Name: "show_nfs", Summary: "one NFS export in full",
+				Method: "sharing.nfs.get_instance", Args: []string{"id"}, Required: []string{"id"},
+			},
+			{Name: "list_web", Summary: "web shares", Method: "sharing.webshare.query"},
+		},
+	}
+}
+
+// Backup answers "is my data actually going somewhere else" — one question
+// spread across cloud sync, replication, rsync, and periodic snapshot tasks.
+func Backup() *Concern {
+	return &Concern{
+		Name:        "backup",
+		Title:       "Backups: cloud sync, replication, rsync, snapshot tasks",
+		Description: "Read the tasks that copy this system's data elsewhere.",
+		Ops: []Op{
+			{Name: "list_cloud_syncs", Summary: "cloud sync tasks and their last result", Method: "cloudsync.query"},
+			{
+				Name: "show_cloud_sync", Summary: "one cloud sync task in full",
+				Method: "cloudsync.get_instance", Args: []string{"id"}, Required: []string{"id"},
+			},
+			{Name: "cloud_credentials", Summary: "configured cloud credentials, without secrets", Method: "cloudsync.credentials.query"},
+			{Name: "list_replications", Summary: "replication tasks and their state", Method: "replication.query"},
+			{
+				Name: "show_replication", Summary: "one replication task in full",
+				Method: "replication.get_instance", Args: []string{"id"}, Required: []string{"id"},
+			},
+			{Name: "list_rsync_tasks", Summary: "rsync tasks", Method: "rsynctask.query"},
+			{Name: "list_snapshot_tasks", Summary: "periodic snapshot tasks and retention", Method: "pool.snapshottask.query"},
+		},
+	}
+}
+
+// Filesystem answers questions about paths themselves rather than the datasets
+// containing them: what is here, how big, and who may read it.
+func Filesystem() *Concern {
+	return &Concern{
+		Name:        "filesystem",
+		Title:       "Files and permissions",
+		Description: "Inspect paths on the TrueNAS target: contents, size, and access control.",
+		Ops: []Op{
+			{
+				Name: "list_directory", Summary: "what is in a path",
+				Method: "filesystem.listdir", Args: []string{"path"}, Required: []string{"path"},
+			},
+			{
+				Name: "stat", Summary: "size, timestamps, and ownership of one path",
+				Method: "filesystem.stat", Args: []string{"path"}, Required: []string{"path"},
+			},
+			{
+				Name: "space", Summary: "space used and available at a path",
+				Method: "filesystem.statfs", Args: []string{"path"}, Required: []string{"path"},
+			},
+			{
+				Name: "acl", Summary: "who may access a path",
+				Method: "filesystem.getacl", Args: []string{"path"}, Required: []string{"path"},
+			},
+		},
+	}
+}
+
 // ReadConcerns is the default read surface.
+//
+// Seven concerns rather than the four the design first budgeted. The budget
+// existed to protect tool-selection accuracy, and what actually protects that
+// is names mapping to distinct domains -- "is my backup running" and "what VMs
+// exist" are not questions a model confuses. Folding them into a single
+// tool with a thirty-value op enum would have been worse on exactly the axis
+// the budget was meant to defend.
 func ReadConcerns() []*Concern {
-	return []*Concern{Storage(), System(), Apps()}
+	return []*Concern{
+		Storage(), System(), Apps(), Sharing(),
+		Virtualization(), Backup(), Filesystem(),
+	}
 }
