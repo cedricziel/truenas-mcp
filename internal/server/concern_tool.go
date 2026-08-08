@@ -22,6 +22,7 @@ type DispatchInput struct {
 	Name    string `json:"name,omitempty" jsonschema:"name, for operations that act on a named object such as an app"`
 	Pool    string `json:"pool,omitempty" jsonschema:"restrict results to this pool"`
 	Dataset string `json:"dataset,omitempty" jsonschema:"restrict results to this dataset"`
+	Path    string `json:"path,omitempty" jsonschema:"a filesystem path, such as /mnt/tank/media"`
 	Limit   int    `json:"limit,omitempty" jsonschema:"maximum number of results to return"`
 }
 
@@ -53,6 +54,9 @@ func (in DispatchInput) args() tools.Args {
 	}
 	if in.Dataset != "" {
 		a["dataset"] = in.Dataset
+	}
+	if in.Path != "" {
+		a["path"] = in.Path
 	}
 	if in.Limit != 0 {
 		a["limit"] = in.Limit
@@ -102,6 +106,9 @@ func middlewareParams(op *tools.Op, in DispatchInput) []any {
 	}
 	if in.Name != "" && contains(op.Args, "name") {
 		return []any{in.Name}
+	}
+	if in.Path != "" && contains(op.Args, "path") {
+		return []any{in.Path}
 	}
 
 	// Query methods take a filter list. Narrowing arguments become filters so
