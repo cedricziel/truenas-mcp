@@ -104,3 +104,30 @@ func TestShapeSingleObjectResultIsNeverProjected(t *testing.T) {
 		t.Error("Projected must be false for a single-object result")
 	}
 }
+
+// Projected has to mean fields were dropped, not that a projection was
+// configured -- it sits next to Truncated, which reports what happened rather
+// than what was asked for, and a caller reading one the way it reads the other
+// would be told an answer is partial when it is whole.
+func TestShapeReportsProjectedOnlyWhenFieldsWereActuallyDropped(t *testing.T) {
+	fields := []string{"name", "state"}
+
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{"object with extra fields loses them", `[{"name":"a","state":"UP","extra":1}]`, true},
+		{"object already minimal loses nothing", `[{"name":"a","state":"UP"}]`, false},
+		{"empty list has nothing to drop", `[]`, false},
+		{"scalar items pass through untouched", `["a","b"]`, false},
+		{"one object among scalars still counts", `["a",{"name":"b","state":"UP","extra":1}]`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := shape("list", json.RawMessage(tc.raw), 0, fields, false)
+			if out.Projected != tc.want {
+				t.Errorf("Projected = %v, want %v for %s", out.Projected, tc.want, tc.raw)
+			}
+		})
+	}
+}

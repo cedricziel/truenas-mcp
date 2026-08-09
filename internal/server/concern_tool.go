@@ -172,10 +172,16 @@ func shape(op string, raw json.RawMessage, limit int, project []string, full boo
 		list = list[:limit]
 	}
 
-	projected := len(project) > 0 && !full
-	if projected {
+	// Projected reports what happened, not what was configured -- the same
+	// contract Truncated keeps. An empty page, or one whose items already
+	// carry nothing but the declared fields, has lost nothing and must not
+	// claim to have.
+	var projected bool
+	if len(project) > 0 && !full {
 		for i, item := range list {
-			list[i] = projectFields(item, project)
+			reduced, dropped := projectFields(item, project)
+			list[i] = reduced
+			projected = projected || dropped
 		}
 	}
 
@@ -189,13 +195,14 @@ func shape(op string, raw json.RawMessage, limit int, project []string, full boo
 	}
 }
 
-// projectFields reduces one item to a named subset of its fields. An item
-// that is not an object -- unexpected, but not this function's place to
-// diagnose -- passes through unchanged rather than being discarded.
-func projectFields(item any, fields []string) any {
+// projectFields reduces one item to a named subset of its fields, reporting
+// whether that actually removed anything. An item that is not an object --
+// unexpected, but not this function's place to diagnose -- passes through
+// unchanged rather than being discarded.
+func projectFields(item any, fields []string) (any, bool) {
 	obj, ok := item.(map[string]any)
 	if !ok {
-		return item
+		return item, false
 	}
 	out := make(map[string]any, len(fields))
 	for _, f := range fields {
@@ -203,5 +210,5 @@ func projectFields(item any, fields []string) any {
 			out[f] = v
 		}
 	}
-	return out
+	return out, len(out) < len(obj)
 }
