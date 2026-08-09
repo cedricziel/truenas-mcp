@@ -22,6 +22,16 @@ func TestMethodCaveatDescribesAppUpdateAsReplaceNotPatch(t *testing.T) {
 	if !strings.Contains(lower, "whole") && !strings.Contains(lower, "full") && !strings.Contains(lower, "complete") {
 		t.Errorf("caveat must say the complete config is required, got: %s", caveat)
 	}
+
+	// A warning alone leaves the caller to work out what to do instead, which
+	// is the state they were already in. These two name the recovery: where the
+	// complete object comes from, and which key it goes back under.
+	if !strings.Contains(lower, `apps(op="config"`) {
+		t.Errorf("caveat must point at the read that produces the complete config, got: %s", caveat)
+	}
+	if !strings.Contains(lower, "values") {
+		t.Errorf("caveat must name the argument the config is passed back as, got: %s", caveat)
+	}
 }
 
 // The table is deliberately short: most methods carry no caveat at all, and

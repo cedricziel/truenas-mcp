@@ -160,6 +160,15 @@ func TestAppsConfigSummaryPointsToUpdateContract(t *testing.T) {
 		t.Errorf("config op summary must mention app.update, so reading the config also teaches "+
 			"its update contract, got: %s", config.Summary)
 	}
+	// Naming the method without stating the contract would just send the caller
+	// to describe_method for the half that matters.
+	if !strings.Contains(config.Summary, "values") {
+		t.Errorf("config op summary must name the argument this object goes back as, got: %s", config.Summary)
+	}
+	if !strings.Contains(config.Summary, "full") || !strings.Contains(config.Summary, "patch") {
+		t.Errorf("config op summary must say the object goes back in full rather than as a patch, got: %s",
+			config.Summary)
+	}
 }
 
 func findOp(c *Concern, name string) *Op {
