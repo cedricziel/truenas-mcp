@@ -14,7 +14,7 @@ import (
 // mismatch is invisible until someone tries the tool.
 func TestDispatchInputCarriesEveryDeclaredArgument(t *testing.T) {
 	// Every field populated, so omitempty does not hide any of them.
-	full := DispatchInput{Op: "x", ID: "x", Name: "x", Pool: "x", Dataset: "x", Path: "x", Limit: 1}
+	full := DispatchInput{Op: "x", ID: "x", Name: "x", Pool: "x", Dataset: "x", Path: "x", Category: "x", Limit: 1}
 	raw, err := json.Marshal(full)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

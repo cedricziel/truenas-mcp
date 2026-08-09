@@ -220,6 +220,7 @@ was always an enhancement over it, and MCP client support for it is thin.
 | `backup` | `list_cloud_syncs`, `show_cloud_sync`, `cloud_credentials`, `list_replications`, `show_replication`, `list_rsync_tasks`, `list_snapshot_tasks` |
 | `filesystem` | `list_directory`, `stat`, `space`, `acl` |
 | `apps` | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
+| `catalog` | `list`, `categories`, `show` |
 | `jobs` | `list`, `show` |
 | `search_methods` | find middleware methods by name |
 | `describe_method` | a method's arguments, summarised |
@@ -243,6 +244,18 @@ The `apps` operations `outdated_images`, `upgrade_summary`, and
 write tier can act — a mutation surface without them forces the model to
 guess. All three take an app `name`; the middleware has no fleet-wide
 equivalent.
+
+`catalog` answers "what could I install", `apps` answers "what is installed" —
+deliberately two tools rather than two operations on one, since a model
+choosing between well-named tools does better than one choosing between
+operations on an overloaded one. `catalog list` projects down to identity and
+version fields by default: the underlying method returns roughly 400 entries,
+each carrying a full HTML readme, config schema, and version history, so an
+unprojected browse would exhaust a caller's context an order of magnitude
+worse than the problem that motivated `apps list`'s own projection. Narrow it
+with `category`, whose vocabulary comes from `catalog categories`; `full=true`
+still returns everything. `catalog show` returns one entry's complete record
+by name, with no separate `catalog.get_app_details` call needed.
 
 ### Write tools
 

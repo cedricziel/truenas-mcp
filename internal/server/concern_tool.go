@@ -24,6 +24,12 @@ type DispatchInput struct {
 	Dataset string `json:"dataset,omitempty" jsonschema:"restrict results to this dataset"`
 	Path    string `json:"path,omitempty" jsonschema:"a filesystem path, such as /mnt/tank/media"`
 
+	// Category narrows a browse to entries carrying it. It is a query filter
+	// like Pool and Dataset above, not a response-shaping argument: an
+	// operation that does not declare it is refused for supplying it, per the
+	// same contract those two already keep.
+	Category string `json:"category,omitempty" jsonschema:"restrict results to this category; see catalog(op=\"categories\") for the vocabulary"`
+
 	// Limit bounds the response, the same way on every op: shape() applies it
 	// to any list-shaped result regardless of which op produced it, and
 	// middlewareParams never reads it. It is deliberately absent from args()
@@ -81,6 +87,9 @@ func (in DispatchInput) args() tools.Args {
 	}
 	if in.Path != "" {
 		a["path"] = in.Path
+	}
+	if in.Category != "" {
+		a["category"] = in.Category
 	}
 	return a
 }

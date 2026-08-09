@@ -13,21 +13,21 @@
 
 ## 3. Add the catalog concern
 
-- [ ] 3.1 Add a `category` argument to `DispatchInput` in `internal/server/concern_tool.go`, carried into `args()` like the other narrowing arguments.
-- [ ] 3.2 Write failing tests for the `Catalog()` concern's shape: it exposes `list`, `categories`, and `show`; `show` requires `name`; `list` declares a projection; no operation maps to a mutating middleware method.
-- [ ] 3.3 Add `Catalog()` to `internal/tools/concerns.go` — `list` → `app.available` (filter `category` → field `categories`, membership operator; projected to name, title, categories, train, latest_version, latest_app_version, installed), `categories` → `app.categories` (no arguments), `show` → `app.available` (filter `name` → field `name`, equality; no projection). Write the concern's doc comment in the house style: why it is separate from `apps`, and why `list` must project.
-- [ ] 3.4 Register the concern in `ReadConcerns()` and update the count in the comment above it.
+- [x] 3.1 Add a `category` argument to `DispatchInput` in `internal/server/concern_tool.go`, carried into `args()` like the other narrowing arguments.
+- [x] 3.2 Write failing tests for the `Catalog()` concern's shape: it exposes `list`, `categories`, and `show`; `show` requires `name`; `list` declares a projection; no operation maps to a mutating middleware method.
+- [x] 3.3 Add `Catalog()` to `internal/tools/concerns.go` — `list` → `app.available` (filter `category` → field `categories`, membership operator; projected to name, title, categories, train, latest_version, latest_app_version, installed), `categories` → `app.categories` (no arguments), `show` → `app.available` (filter `name` → field `name`, equality; no projection). Write the concern's doc comment in the house style: why it is separate from `apps`, and why `list` must project.
+- [x] 3.4 Register the concern in `ReadConcerns()` and update the count in the comment above it.
 
 ## 4. Verify end to end
 
-- [ ] 4.1 Add a server-level test proving a catalog browse over a fake multi-entry response is bounded and projected, and reports total, truncated, and projected.
-- [ ] 4.2 Add a server-level test proving `show` returns the complete record for one named entry rather than a projected one.
-- [ ] 4.3 Add a server-level test proving a category-narrowed browse sends the membership filter to the target and reports the filtered total, not the unfiltered one.
-- [ ] 4.4 Confirm the existing read-only annotation test covers the new tool, extending its concern list if it enumerates them by name.
+- [x] 4.1 Add a server-level test proving a catalog browse over a fake multi-entry response is bounded and projected, and reports total, truncated, and projected.
+- [x] 4.2 Add a server-level test proving `show` returns the complete record for one named entry rather than a projected one.
+- [x] 4.3 Add a server-level test proving a category-narrowed browse sends the membership filter to the target and reports the filtered total, not the unfiltered one.
+- [x] 4.4 Confirm the existing read-only annotation test covers the new tool, extending its concern list if it enumerates them by name.
 
 ## 5. Ship
 
-- [ ] 5.1 Run `make format`, `make lint`, and `go test ./...`; all must pass.
-- [ ] 5.2 Check whether README.md enumerates the read tools; if it does, add the catalog concern in the same increment.
+- [x] 5.1 Run `make format`, `make lint`, and `go test ./...`; all must pass.
+- [x] 5.2 Check whether README.md enumerates the read tools; if it does, add the catalog concern in the same increment.
 - [ ] 5.3 Sync the delta spec into `openspec/specs/read-tools/spec.md` and archive the change.
 - [ ] 5.4 Commit in reviewable pieces — the filter mechanism plus its migration, then the catalog concern, then the spec sync — and open a PR.
