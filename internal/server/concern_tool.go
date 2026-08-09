@@ -123,7 +123,27 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 			return nil, DispatchOutput{}, err
 		}
 
-		return nil, shape(in.Op, raw, in.Limit, op.Project, in.Full), nil
+		out := shape(in.Op, raw, in.Limit, op.Project, in.Full)
+
+		// An op that declares Options sent its own limit to the target as
+		// part of the call (see middlewareParams and Op.Options's comment),
+		// rather than requesting everything and being cut down to size by
+		// shape() above. So Total and Truncated, as shape() computed them,
+		// describe the page the target chose to hand back -- not the
+		// collection they claim to describe -- and reporting either would be
+		// a specific, confidently wrong answer rather than an honest
+		// omission. audit.query holds on the order of 1200 records; a
+		// defaultLimit page of 50 is not "50 total", and whether more exist
+		// beyond the page is equally unknowable, since the server asked the
+		// target for exactly `limit` and got exactly that back. Clear both
+		// here rather than teaching shape() to guess at something only the
+		// caller of shape() actually knows.
+		if op.Options != nil {
+			out.Total = 0
+			out.Truncated = false
+		}
+
+		return nil, out, nil
 	})
 }
 
@@ -143,6 +163,18 @@ func middlewareParams(op *tools.Op, in DispatchInput) []any {
 	}
 	if in.Path != "" && contains(op.Args, "path") {
 		return []any{in.Path}
+	}
+
+	// An op that declares Options needs its object parameter present with a
+	// bound inside it before the target accepts the call at all -- see
+	// Op.Options's comment for why that rules out a bare filter list or no
+	// parameters. withCallerLimit merges the caller's effective limit into a
+	// copy of the declared object rather than the object itself: Options
+	// lives on the Op inside a Concern built once at startup and reused for
+	// every call this operation ever serves, so mutating it in place would
+	// leak one caller's limit into the next caller's request.
+	if op.Options != nil {
+		return []any{withCallerLimit(op.Options, effectiveLimit(in.Limit))}
 	}
 
 	// Query methods take a filter list. Each op declares which of its
@@ -168,6 +200,39 @@ func middlewareParams(op *tools.Op, in DispatchInput) []any {
 	return nil
 }
 
+// effectiveLimit is the bound a caller actually gets: their own limit when
+// supplied, otherwise defaultLimit. shape() and middlewareParams both need
+// this exact resolution -- an op that sends its limit upstream must send the
+// same number shape() would otherwise have applied locally, or the two paths
+// would silently diverge on what "no limit supplied" means.
+func effectiveLimit(limit int) int {
+	if limit <= 0 {
+		return defaultLimit
+	}
+	return limit
+}
+
+// withCallerLimit returns a copy of an op's declared Options with limit
+// merged into its query-options object, leaving the original untouched. See
+// Op.Options's comment for why the limit cannot simply be declared as part
+// of Options in the first place.
+func withCallerLimit(options map[string]any, limit int) map[string]any {
+	merged := make(map[string]any, len(options))
+	for k, v := range options {
+		merged[k] = v
+	}
+
+	queryOptions, _ := merged["query-options"].(map[string]any)
+	mergedQueryOptions := make(map[string]any, len(queryOptions)+1)
+	for k, v := range queryOptions {
+		mergedQueryOptions[k] = v
+	}
+	mergedQueryOptions["limit"] = limit
+	merged["query-options"] = mergedQueryOptions
+
+	return merged
+}
+
 func contains(haystack []string, needle string) bool {
 	for _, v := range haystack {
 		if v == needle {
@@ -182,10 +247,19 @@ func contains(haystack []string, needle string) bool {
 // declares one and full is not set, additionally reduces each item to a
 // named subset of fields -- the same principle applied to fields that limit
 // already applies to item count.
+//
+// shape always computes Total and Truncated from len(list) here, which is
+// only truthful when this function is also the thing that asked for
+// everything and is now cutting it down -- true for every op except one that
+// declares Options (see that field's doc): such an op already sent limit to
+// the target as part of the call, so list here is a page the target chose to
+// hand back out of however many records actually exist, and shape has no way
+// to tell that apart from a complete answer. registerConcern is the one that
+// knows which case it is -- it is the caller that resolved the op and built
+// the call -- so it clears both fields afterward for that case rather than
+// shape trying to infer it from data that looks identical either way.
 func shape(op string, raw json.RawMessage, limit int, project []string, full bool) DispatchOutput {
-	if limit <= 0 {
-		limit = defaultLimit
-	}
+	limit = effectiveLimit(limit)
 
 	var list []any
 	if err := json.Unmarshal(raw, &list); err != nil {

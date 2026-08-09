@@ -88,6 +88,34 @@ func System() *Concern {
 				Name:    "audit_log",
 				Summary: "recent audited actions, for seeing what changed on the system",
 				Method:  "audit.query",
+				// audit.query rejects a call whose object parameter carries no
+				// query-options bound at all -- verified live against TrueNAS
+				// 26: no parameters, {}, {"services":[...]}, and even
+				// {"query-options":{}} all return -32602 Invalid params, while
+				// {"query-options":{"limit":N}} succeeds. describe_method
+				// reports zero required parameters for this method, so nothing
+				// in the middleware's own introspection says this -- it was
+				// found by probing the live target.
+				//
+				// Options declares the parts of that object that stay constant
+				// across every call. The bound itself is deliberately not one
+				// of them: server.middlewareParams merges the caller's
+				// effective limit into query-options.limit at dispatch time,
+				// because that limit has to travel to the target rather than
+				// being applied to the response the way shape() bounds every
+				// other operation -- the target refuses the call before there
+				// is any response to bound. A limit hardcoded here would
+				// silently cap a caller who explicitly asked for more.
+				//
+				// order_by is unconditional rather than caller-controlled for
+				// a different reason: without it, audit.query returns the
+				// OLDEST records first, backwards for an op whose whole point
+				// is "what changed recently".
+				Options: map[string]any{
+					"query-options": map[string]any{
+						"order_by": []string{"-message_timestamp"},
+					},
+				},
 			},
 		},
 	}
