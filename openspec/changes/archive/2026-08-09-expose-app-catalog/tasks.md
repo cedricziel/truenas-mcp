@@ -29,5 +29,5 @@
 
 - [x] 5.1 Run `make format`, `make lint`, and `go test ./...`; all must pass.
 - [x] 5.2 Check whether README.md enumerates the read tools; if it does, add the catalog concern in the same increment.
-- [ ] 5.3 Sync the delta spec into `openspec/specs/read-tools/spec.md` and archive the change.
-- [ ] 5.4 Commit in reviewable pieces — the filter mechanism plus its migration, then the catalog concern, then the spec sync — and open a PR.
+- [x] 5.3 Sync the delta spec into `openspec/specs/read-tools/spec.md` and archive the change.
+- [x] 5.4 Commit in reviewable pieces — the filter mechanism plus its migration, then the catalog concern, then the spec sync — and open a PR.
