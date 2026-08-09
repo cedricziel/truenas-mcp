@@ -3,8 +3,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sort"
+	"time"
 
 	"github.com/cedricziel/truenas-mcp/internal/tools"
+	"github.com/cedricziel/truenas-mcp/internal/truenas"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -18,11 +22,12 @@ import (
 type DispatchInput struct {
 	Op string `json:"op" jsonschema:"which operation to run; see the tool description"`
 
-	ID      string `json:"id,omitempty" jsonschema:"identifier, for operations that act on one object"`
-	Name    string `json:"name,omitempty" jsonschema:"name, for operations that act on a named object such as an app"`
-	Pool    string `json:"pool,omitempty" jsonschema:"restrict results to this pool"`
-	Dataset string `json:"dataset,omitempty" jsonschema:"restrict results to this dataset"`
-	Path    string `json:"path,omitempty" jsonschema:"a filesystem path, such as /mnt/tank/media"`
+	ID        string `json:"id,omitempty" jsonschema:"identifier, for operations that act on one object"`
+	Name      string `json:"name,omitempty" jsonschema:"name, for operations that act on a named object such as an app"`
+	Container string `json:"container,omitempty" jsonschema:"container ID for an app log tail; omit only when the app has one container"`
+	Pool      string `json:"pool,omitempty" jsonschema:"restrict results to this pool"`
+	Dataset   string `json:"dataset,omitempty" jsonschema:"restrict results to this dataset"`
+	Path      string `json:"path,omitempty" jsonschema:"a filesystem path, such as /mnt/tank/media"`
 
 	// Category narrows a browse to entries carrying it. It is a query filter
 	// like Pool and Dataset above, not a response-shaping argument: an
@@ -45,10 +50,12 @@ type DispatchInput struct {
 // DispatchOutput carries the middleware's answer plus enough context for a
 // caller to know what it is looking at and whether anything was withheld.
 type DispatchOutput struct {
-	Op        string `json:"op" jsonschema:"the operation that ran"`
-	Count     int    `json:"count,omitempty" jsonschema:"number of items returned"`
-	Total     int    `json:"total,omitempty" jsonschema:"total available, when more exist than were returned"`
-	Truncated bool   `json:"truncated,omitempty" jsonschema:"whether the result was cut short"`
+	Op              string `json:"op" jsonschema:"the operation that ran"`
+	Count           int    `json:"count,omitempty" jsonschema:"number of items returned"`
+	Total           int    `json:"total,omitempty" jsonschema:"total available, when more exist than were returned"`
+	Truncated       bool   `json:"truncated,omitempty" jsonschema:"whether the result was cut short"`
+	Bound           string `json:"bound,omitempty" jsonschema:"the bound that ended an event-source collection"`
+	ContentWithheld bool   `json:"content_withheld,omitempty" jsonschema:"whether an entry exceeded the response byte bound and was omitted"`
 	// Projected mirrors Truncated's role but for fields rather than items: a
 	// result with dropped fields must not read as complete any more than a
 	// truncated list does. Pass full=true on the next call to get everything.
@@ -78,6 +85,9 @@ func (in DispatchInput) args() tools.Args {
 	}
 	if in.Name != "" {
 		a["name"] = in.Name
+	}
+	if in.Container != "" {
+		a["container"] = in.Container
 	}
 	if in.Pool != "" {
 		a["pool"] = in.Pool
@@ -117,6 +127,10 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 			return nil, DispatchOutput{}, err
 		}
 
+		if c.Name == "apps" && op.Name == "logs" {
+			return appLogs(ctx, s.Client(), in)
+		}
+
 		params := middlewareParams(op, in)
 		raw, err := s.Client().Call(ctx, op.Method, params...)
 		if err != nil {
@@ -145,6 +159,101 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 
 		return nil, out, nil
 	})
+}
+
+const (
+	logByteLimit     = 32 * 1024
+	logQuietInterval = 100 * time.Millisecond
+	logDeadline      = 2 * time.Second
+)
+
+// appLogs is intentionally local to apps.logs. The concern table describes
+// methods everywhere else; adding one event source does not justify a second,
+// generalized dispatch declaration system.
+func appLogs(ctx context.Context, client *truenas.Client, in DispatchInput) (*mcp.CallToolResult, DispatchOutput, error) {
+	container := in.Container
+	if container == "" {
+		raw, err := client.Call(ctx, "app.container_ids", in.Name)
+		if err != nil {
+			return nil, DispatchOutput{}, err
+		}
+		var containerDetails map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &containerDetails); err != nil {
+			return nil, DispatchOutput{}, fmt.Errorf("decoding containers for app %q: %w", in.Name, err)
+		}
+		containers := make([]string, 0, len(containerDetails))
+		for id := range containerDetails {
+			containers = append(containers, id)
+		}
+		sort.Strings(containers)
+		switch len(containers) {
+		case 0:
+			return nil, DispatchOutput{}, fmt.Errorf("app %q has no containers", in.Name)
+		case 1:
+			container = containers[0]
+		default:
+			return nil, DispatchOutput{}, fmt.Errorf(
+				"app %q has multiple containers; supply container as one of: %v", in.Name, containers)
+		}
+	}
+
+	args, err := json.Marshal(struct {
+		AppName     string `json:"app_name"`
+		ContainerID string `json:"container_id"`
+		TailLines   int    `json:"tail_lines"`
+	}{in.Name, container, effectiveLimit(in.Limit)})
+	if err != nil {
+		return nil, DispatchOutput{}, fmt.Errorf("encoding app log subscription: %w", err)
+	}
+	source := "app.container_log_follow:" + string(args)
+
+	collectCtx, cancel := context.WithCancel(ctx)
+	defer cancel() // Releasing the child context closes the shared connection's stream on every result path.
+	subscription, err := client.Subscribe(collectCtx, source)
+	if err != nil {
+		return nil, DispatchOutput{}, err
+	}
+
+	entries := make(chan logEntry)
+	go func() {
+		defer close(entries)
+		for raw := range subscription.Events {
+			var event struct {
+				Timestamp string `json:"timestamp"`
+				Data      string `json:"data"`
+			}
+			if json.Unmarshal(raw, &event) == nil {
+				select {
+				case entries <- logEntry{Timestamp: event.Timestamp, Text: event.Data}:
+				case <-collectCtx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	collection := collectLogEntries(collectCtx, entries, logCollectionOptions{
+		Count:         effectiveLimit(in.Limit),
+		ByteLimit:     logByteLimit,
+		QuietInterval: logQuietInterval,
+		Deadline:      logDeadline,
+	})
+	if err := subscription.Err(); err != nil {
+		return nil, DispatchOutput{}, err
+	}
+
+	result := make([]map[string]string, 0, len(collection.Entries))
+	for _, entry := range collection.Entries {
+		result = append(result, map[string]string{"timestamp": entry.Timestamp, "data": entry.Text})
+	}
+	return nil, DispatchOutput{
+		Op:              in.Op,
+		Count:           len(result),
+		Truncated:       collection.Bound == logCollectionBoundBytes,
+		Bound:           string(collection.Bound),
+		ContentWithheld: collection.ContentWithheld,
+		Result:          result,
+	}, nil
 }
 
 // middlewareParams turns the resolved operation and arguments into the
