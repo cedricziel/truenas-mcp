@@ -44,6 +44,37 @@ type Op struct {
 	// declared projection is a claim that these particular fields are what
 	// answers the question, and that claim should not be guessed.
 	Project []string
+
+	// Filters names the arguments this operation passes to the target as
+	// query filters rather than as a positional parameter, and how. This
+	// replaces a dispatcher-wide hardcoded mapping (pool, dataset) with a
+	// per-operation declaration: which argument, which middleware field it
+	// narrows, and which comparison operator to apply. An argument's role is
+	// a property of the operation that declares it -- the same argument name
+	// can be positional on one operation (Args) and a filter on another.
+	Filters []Filter
+}
+
+// Filter declares one argument as a middleware query filter: which argument
+// supplies the value, which field on the target it narrows, and which
+// comparison operator joins them.
+//
+// The operator is declared rather than inferred from the argument's value
+// (e.g. "a list gets membership") because the field's shape lives on the
+// target, not in what the caller sent -- categories is list-valued and needs
+// "rin", pool is scalar and needs "=", and only the operation author, who has
+// actually checked the target, knows which. Inferring it from the value's Go
+// type would be right by luck rather than by design.
+type Filter struct {
+	// Arg is the DispatchInput argument name that supplies the value.
+	Arg string
+
+	// Field is the middleware field name the filter narrows on.
+	Field string
+
+	// Operator is the middleware comparison operator, such as "=" for
+	// equality or "rin" for membership on a list-valued field.
+	Operator string
 }
 
 // Concern is a user-facing grouping of read operations, exposed as one tool.
@@ -67,6 +98,29 @@ func (c *Concern) OpNames() []string {
 	return names
 }
 
+// acceptedArgs is the full set of argument names Resolve accepts for this
+// operation: positional Args plus the Arg of each declared filter, in that
+// order and de-duplicated. Kept as one function so the accept-set used to
+// validate a call and the one reported back in a refusal can never drift
+// apart.
+func (op *Op) acceptedArgs() []string {
+	seen := make(map[string]bool, len(op.Args)+len(op.Filters))
+	out := make([]string, 0, len(op.Args)+len(op.Filters))
+	for _, a := range op.Args {
+		if !seen[a] {
+			seen[a] = true
+			out = append(out, a)
+		}
+	}
+	for _, f := range op.Filters {
+		if !seen[f.Arg] {
+			seen[f.Arg] = true
+			out = append(out, f.Arg)
+		}
+	}
+	return out
+}
+
 // Resolve selects an operation and validates the supplied arguments against it.
 //
 // Errors are written so a model that guessed wrong can recover in one turn:
@@ -85,8 +139,12 @@ func (c *Concern) Resolve(opName string, args Args) (*Op, error) {
 			opName, c.Name, strings.Join(c.OpNames(), ", "))
 	}
 
+	// A filter is another way of reaching the target, not a response-shaping
+	// knob, so it belongs in the same accept-or-refuse set as a positional
+	// identifier: the allowed set is Args plus each declared filter's Arg.
+	accepted := op.acceptedArgs()
 	allowed := map[string]bool{}
-	for _, a := range op.Args {
+	for _, a := range accepted {
 		allowed[a] = true
 	}
 
@@ -102,8 +160,8 @@ func (c *Concern) Resolve(opName string, args Args) (*Op, error) {
 	if len(unexpected) > 0 {
 		sort.Strings(unexpected)
 		valid := "none"
-		if len(op.Args) > 0 {
-			valid = strings.Join(op.Args, ", ")
+		if len(accepted) > 0 {
+			valid = strings.Join(accepted, ", ")
 		}
 		return nil, fmt.Errorf("operation %q does not accept %s; it accepts: %s",
 			opName, strings.Join(unexpected, ", "), valid)

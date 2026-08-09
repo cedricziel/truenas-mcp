@@ -33,7 +33,7 @@ func Storage() *Concern {
 				Name:    "list_datasets",
 				Summary: "datasets with usage; narrow with pool",
 				Method:  "pool.dataset.query",
-				Args:    []string{"pool"},
+				Filters: []Filter{{Arg: "pool", Field: "pool", Operator: "="}},
 			},
 			{
 				Name:     "show_dataset",
@@ -46,7 +46,7 @@ func Storage() *Concern {
 				Name:    "list_snapshots",
 				Summary: "snapshots; narrow with dataset",
 				Method:  "pool.snapshot.query",
-				Args:    []string{"dataset"},
+				Filters: []Filter{{Arg: "dataset", Field: "dataset", Operator: "="}},
 			},
 		},
 	}
@@ -195,6 +195,68 @@ func Apps() *Concern {
 	}
 }
 
+// Catalog answers "what could I install" -- a separate concern from Apps,
+// which answers only "what is installed". The two are genuinely different
+// questions with different defaults (installed state matters for one and not
+// the other), and a model choosing between two well-named tools does better
+// than one choosing between operations on a tool that answers both.
+//
+// list must project by default, for the same reason apps.list does but an
+// order of magnitude more so: app.available returns roughly 400 entries on a
+// real target, and a full entry carries an HTML readme, its JSON config
+// schema, and its version history. Returning that unprojected is not merely
+// wasteful the way an unprojected app.query was -- it is the difference
+// between a usable browse and one that cannot be called at all. full=true
+// remains the escape hatch, as everywhere else this pattern is used.
+//
+// list and show both reach app.available, which is query-shaped rather than
+// name-addressable: it takes a filter list, not a positional identifier. show
+// filters by name under equality; list optionally filters by category under
+// membership, because categories is a list-valued field on the target and
+// equality would never match it. Both were verified against a live TrueNAS 26
+// target: [["categories", "rin", "media"]] returns the media apps, and
+// [["name", "=", "plex"]] returns exactly the one entry. This is also why
+// show is a filter on app.available rather than catalog.get_app_details,
+// which would answer the same question but needs a second object argument
+// the flat dispatch shape cannot carry.
+func Catalog() *Concern {
+	return &Concern{
+		Name:  "catalog",
+		Title: "Applications available to install",
+		Description: "Browse the catalog of applications that can be installed. Distinct " +
+			"from apps, which covers only what is already installed on this system.",
+		Ops: []Op{
+			{
+				Name:    "list",
+				Summary: "browse the catalog; narrow with category",
+				Method:  "app.available",
+				Filters: []Filter{{Arg: "category", Field: "categories", Operator: "rin"}},
+				// installed earns its place here specifically: without it a
+				// caller must cross-reference every candidate against
+				// apps(op="list") to avoid proposing something already
+				// running. Everything else -- readme, schema, maintainers,
+				// icon, full version history -- is what full=true is for.
+				Project: []string{
+					"name", "title", "categories", "train",
+					"latest_version", "latest_app_version", "installed",
+				},
+			},
+			{
+				Name:    "categories",
+				Summary: "the category vocabulary, so list can be narrowed without guessing a name",
+				Method:  "app.categories",
+			},
+			{
+				Name:     "show",
+				Summary:  "one catalog entry in full, by name",
+				Method:   "app.available",
+				Required: []string{"name"},
+				Filters:  []Filter{{Arg: "name", Field: "name", Operator: "="}},
+			},
+		},
+	}
+}
+
 // Virtualization answers "what else is running on this box" — TrueNAS spreads
 // that across vm, container, and lxc as separate namespaces, but to a person
 // they are one question.
@@ -302,15 +364,17 @@ func Filesystem() *Concern {
 
 // ReadConcerns is the default read surface.
 //
-// Seven concerns rather than the four the design first budgeted. The budget
+// Eight concerns rather than the four the design first budgeted. The budget
 // existed to protect tool-selection accuracy, and what actually protects that
 // is names mapping to distinct domains -- "is my backup running" and "what VMs
 // exist" are not questions a model confuses. Folding them into a single
 // tool with a thirty-value op enum would have been worse on exactly the axis
-// the budget was meant to defend.
+// the budget was meant to defend. Catalog is the eighth: "what could I
+// install" and "what is installed" (Apps) are exactly that kind of distinct
+// domain, not two operations on the same one.
 func ReadConcerns() []*Concern {
 	return []*Concern{
 		Storage(), System(), Apps(), Sharing(),
-		Virtualization(), Backup(), Filesystem(),
+		Virtualization(), Backup(), Filesystem(), Catalog(),
 	}
 }

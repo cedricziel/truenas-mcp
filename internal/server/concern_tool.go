@@ -24,6 +24,12 @@ type DispatchInput struct {
 	Dataset string `json:"dataset,omitempty" jsonschema:"restrict results to this dataset"`
 	Path    string `json:"path,omitempty" jsonschema:"a filesystem path, such as /mnt/tank/media"`
 
+	// Category narrows a browse to entries carrying it. It is a query filter
+	// like Pool and Dataset above, not a response-shaping argument: an
+	// operation that does not declare it is refused for supplying it, per the
+	// same contract those two already keep.
+	Category string `json:"category,omitempty" jsonschema:"restrict results to this category; see catalog(op=\"categories\") for the vocabulary"`
+
 	// Limit bounds the response, the same way on every op: shape() applies it
 	// to any list-shaped result regardless of which op produced it, and
 	// middlewareParams never reads it. It is deliberately absent from args()
@@ -82,6 +88,9 @@ func (in DispatchInput) args() tools.Args {
 	if in.Path != "" {
 		a["path"] = in.Path
 	}
+	if in.Category != "" {
+		a["category"] = in.Category
+	}
 	return a
 }
 
@@ -121,7 +130,11 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 // middlewareParams turns the resolved operation and arguments into the
 // positional parameters the middleware method expects.
 func middlewareParams(op *tools.Op, in DispatchInput) []any {
-	// get_instance-style methods take the identifier positionally.
+	// get_instance-style methods take the identifier positionally. This wins
+	// over any declared filter when an operation has both: an operation that
+	// takes an identifier positionally is fetching one record, and a filter
+	// alongside it would be meaningless, so there is no merge to define --
+	// resolving positionally first and returning is what this already did.
 	if in.ID != "" && contains(op.Args, "id") {
 		return []any{in.ID}
 	}
@@ -132,14 +145,22 @@ func middlewareParams(op *tools.Op, in DispatchInput) []any {
 		return []any{in.Path}
 	}
 
-	// Query methods take a filter list. Narrowing arguments become filters so
-	// the target does the work rather than this server post-filtering.
+	// Query methods take a filter list. Each op declares which of its
+	// arguments becomes a filter, against which middleware field and under
+	// which comparison operator -- there is no dispatcher-wide notion of "a
+	// filterable argument" any more, because the same argument name can play
+	// a different role on a different op (see design.md's "Declared filters
+	// widen what Resolve accepts"). in.args() is the single place that maps
+	// an argument name to its value, so it is reused here rather than
+	// re-deriving that mapping.
+	argVals := in.args()
 	var filters []any
-	if in.Pool != "" && contains(op.Args, "pool") {
-		filters = append(filters, []any{"pool", "=", in.Pool})
-	}
-	if in.Dataset != "" && contains(op.Args, "dataset") {
-		filters = append(filters, []any{"dataset", "=", in.Dataset})
+	for _, f := range op.Filters {
+		v, ok := argVals[f.Arg]
+		if !ok {
+			continue
+		}
+		filters = append(filters, []any{f.Field, f.Operator, v})
 	}
 	if len(filters) > 0 {
 		return []any{filters}

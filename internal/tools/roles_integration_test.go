@@ -79,6 +79,18 @@ func TestReadConcernsOnlyUseReadOnlyMethods(t *testing.T) {
 	}
 }
 
+// isFilterArg reports whether name is the Arg of one of op's declared
+// filters, so a required argument backed by a filter can be told apart from
+// one the method's own positional signature demands.
+func isFilterArg(op Op, name string) bool {
+	for _, f := range op.Filters {
+		if f.Arg == name {
+			return true
+		}
+	}
+	return false
+}
+
 // methodMeta is the slice of core.get_methods this project relies on.
 type methodMeta struct {
 	Roles   []string `json:"roles"`
@@ -115,9 +127,26 @@ func TestOpsDeclareRequiredArgsTheMethodDemands(t *testing.T) {
 					"operation declares none; a call without them returns null",
 					concern.Name, op.Name, op.Method, needed)
 			}
+
+			// A required argument the method itself does not demand is not
+			// automatically a mismatch: catalog show requires name even though
+			// app.available takes nothing positionally, because name is a query
+			// filter that keeps show from returning all ~400 catalog entries
+			// unprojected. That is a safety decision the op is entitled to make,
+			// not a bug -- so only a required argument neither the method nor a
+			// declared filter accounts for should trip this check.
 			if needed == 0 && len(op.Required) > 0 {
-				t.Errorf("%s.%s: method %q takes no required parameters but the "+
-					"operation demands %v", concern.Name, op.Name, op.Method, op.Required)
+				var unaccounted []string
+				for _, r := range op.Required {
+					if !isFilterArg(op, r) {
+						unaccounted = append(unaccounted, r)
+					}
+				}
+				if len(unaccounted) > 0 {
+					t.Errorf("%s.%s: method %q takes no required parameters but the "+
+						"operation demands %v, and none of them is satisfied by a "+
+						"declared filter", concern.Name, op.Name, op.Method, unaccounted)
+				}
 			}
 		}
 	}

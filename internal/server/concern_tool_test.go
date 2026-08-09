@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/cedricziel/truenas-mcp/internal/tools"
@@ -13,7 +14,7 @@ import (
 // mismatch is invisible until someone tries the tool.
 func TestDispatchInputCarriesEveryDeclaredArgument(t *testing.T) {
 	// Every field populated, so omitempty does not hide any of them.
-	full := DispatchInput{Op: "x", ID: "x", Name: "x", Pool: "x", Dataset: "x", Path: "x", Limit: 1}
+	full := DispatchInput{Op: "x", ID: "x", Name: "x", Pool: "x", Dataset: "x", Path: "x", Category: "x", Limit: 1}
 	raw, err := json.Marshal(full)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -31,7 +32,76 @@ func TestDispatchInputCarriesEveryDeclaredArgument(t *testing.T) {
 						c.Name, op.Name, arg)
 				}
 			}
+			// A filter is just as much a way of reaching the target as a
+			// positional argument, so it needs the same coverage: a Filter
+			// whose Arg names a field DispatchInput does not have would fail
+			// silently, since middlewareParams would just never find a value
+			// for it.
+			for _, f := range op.Filters {
+				if _, ok := fields[f.Arg]; !ok {
+					t.Errorf("%s.%s declares filter argument %q, which DispatchInput cannot carry",
+						c.Name, op.Name, f.Arg)
+				}
+			}
 		}
+	}
+}
+
+// A declared filter must become a middleware filter triple under the operator
+// the operation declared, not a hardcoded one -- this is the whole point of
+// moving pool/dataset off the dispatcher's own chain and onto Op.Filters.
+func TestMiddlewareParamsBuildsDeclaredFilter(t *testing.T) {
+	op := tools.Op{
+		Name:    "list_datasets",
+		Method:  "pool.dataset.query",
+		Filters: []tools.Filter{{Arg: "pool", Field: "pool", Operator: "="}},
+	}
+	in := DispatchInput{Op: "list_datasets", Pool: "tank"}
+
+	got := middlewareParams(&op, in)
+	want := []any{[]any{[]any{"pool", "=", "tank"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("middlewareParams = %#v, want %#v", got, want)
+	}
+}
+
+// A declared membership operator must reach the target as such. Using "pool"
+// with "rin" here is deliberately hypothetical -- no real concern declares
+// pool that way -- because the point is that middlewareParams emits whatever
+// operator the operation declared, not that it special-cases any one field.
+func TestMiddlewareParamsEmitsDeclaredOperatorRatherThanEquality(t *testing.T) {
+	op := tools.Op{
+		Name:    "hypothetical",
+		Method:  "some.query",
+		Filters: []tools.Filter{{Arg: "pool", Field: "pool", Operator: "rin"}},
+	}
+	in := DispatchInput{Op: "hypothetical", Pool: "tank"}
+
+	got := middlewareParams(&op, in)
+	want := []any{[]any{[]any{"pool", "rin", "tank"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("middlewareParams = %#v, want %#v -- a declared membership filter "+
+			"must not be silently emitted as equality", got, want)
+	}
+}
+
+// An operation that takes an identifier positionally is fetching one record;
+// a filter alongside it would be meaningless. Positional resolution has to
+// win rather than the two being merged.
+func TestMiddlewareParamsPositionalWinsOverDeclaredFilter(t *testing.T) {
+	op := tools.Op{
+		Name:    "show",
+		Method:  "app.get_instance",
+		Args:    []string{"name"},
+		Filters: []tools.Filter{{Arg: "name", Field: "name", Operator: "="}},
+	}
+	in := DispatchInput{Op: "show", Name: "plex"}
+
+	got := middlewareParams(&op, in)
+	want := []any{"plex"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("middlewareParams = %#v, want %#v -- positional resolution must win "+
+			"when an operation declares both", got, want)
 	}
 }
 

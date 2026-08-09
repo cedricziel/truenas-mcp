@@ -9,7 +9,7 @@ import "testing"
 func TestReadToolsAreReadOnlyAndNotDestructive(t *testing.T) {
 	srv := NewMCPServer(MCPConfig{Version: "t", Target: "nas", EnableWrites: true}, stubSession)
 
-	readTools := []string{"storage", "system", "apps", "jobs", "server_info", "system_info"}
+	readTools := []string{"storage", "system", "apps", "catalog", "jobs", "server_info", "system_info"}
 	all := registeredTools(t, srv)
 
 	for _, name := range readTools {

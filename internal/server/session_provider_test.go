@@ -28,6 +28,16 @@ type fakeTarget struct {
 
 	mu        sync.Mutex
 	responses map[string]json.RawMessage
+	handlers  map[string]func(params json.RawMessage) any
+	calls     []capturedCall
+}
+
+// capturedCall is one request the fake target received, kept so a test can
+// assert what the server actually sent -- a filter's field, operator, and
+// value -- rather than only what came back.
+type capturedCall struct {
+	method string
+	params json.RawMessage
 }
 
 const fakeTargetAPIKey = "1-validkey"
@@ -54,6 +64,7 @@ func newFakeTarget(t *testing.T) *fakeTarget {
 			if err := conn.ReadJSON(&req); err != nil {
 				return
 			}
+			f.recordCall(req.Method, req.Params)
 
 			resp := struct {
 				JSONRPC string          `json:"jsonrpc"`
@@ -61,7 +72,9 @@ func newFakeTarget(t *testing.T) *fakeTarget {
 				Result  json.RawMessage `json:"result,omitempty"`
 			}{JSONRPC: "2.0", ID: req.ID}
 
-			if custom, ok := f.customResponse(req.Method); ok {
+			if handler, ok := f.handler(req.Method); ok {
+				resp.Result, _ = json.Marshal(handler(req.Params))
+			} else if custom, ok := f.customResponse(req.Method); ok {
 				resp.Result = custom
 			} else {
 				switch req.Method {
@@ -106,6 +119,46 @@ func (f *fakeTarget) customResponse(method string) (json.RawMessage, bool) {
 	defer f.mu.Unlock()
 	raw, ok := f.responses[method]
 	return raw, ok
+}
+
+// respondFunc registers a handler computing the result from the call's own
+// params, for tests that must prove *what* was sent rather than just that
+// something was -- a category filter narrowing the response the fake target
+// hands back, say, rather than always the same canned list regardless of
+// what the server asked for.
+func (f *fakeTarget) respondFunc(method string, fn func(params json.RawMessage) any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.handlers == nil {
+		f.handlers = map[string]func(params json.RawMessage) any{}
+	}
+	f.handlers[method] = fn
+}
+
+func (f *fakeTarget) handler(method string) (func(params json.RawMessage) any, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fn, ok := f.handlers[method]
+	return fn, ok
+}
+
+func (f *fakeTarget) recordCall(method string, params json.RawMessage) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, capturedCall{method: method, params: params})
+}
+
+// lastParams returns the params of the most recent call to method, so a test
+// can inspect exactly what filter triple the server sent.
+func (f *fakeTarget) lastParams(method string) (json.RawMessage, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.calls) - 1; i >= 0; i-- {
+		if f.calls[i].method == method {
+			return f.calls[i].params, true
+		}
+	}
+	return nil, false
 }
 
 // URL is the ws:// endpoint SessionManager should dial.
