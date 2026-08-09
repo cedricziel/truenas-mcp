@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/cedricziel/truenas-mcp/compare/v0.3.0...v0.3.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* give audit_log the query-options bound audit.query demands ([#21](https://github.com/cedricziel/truenas-mcp/issues/21)) ([a54068a](https://github.com/cedricziel/truenas-mcp/commit/a54068a7c436ee09e5bceff3a89f5b2a089abbcc))
+
 ## [0.3.0](https://github.com/cedricziel/truenas-mcp/compare/v0.2.4...v0.3.0) (2026-08-09)
 
 
