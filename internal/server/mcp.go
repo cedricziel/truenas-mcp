@@ -51,6 +51,51 @@ type emptyInput struct{}
 // sessionFor is how a tool reaches the middleware under the caller's identity.
 type sessionFor func(context.Context) (*Session, error)
 
+// serverInstructions is returned at initialize, and is the only thing a client
+// reads before it starts choosing tools.
+//
+// It exists because of a specific failure. An agent working on a target needed
+// to create a directory, pull a container image, and read a directory's
+// contents; it concluded the middleware modelled none of them and shelled into
+// the box over SSH instead. All three are middleware methods -- filesystem.mkdir,
+// app.image.pull, filesystem.listdir -- and the last is already a dedicated
+// tool. The agent was not being careless: it used the tools it could see, and
+// nothing told it that what it could see was a curated fraction of roughly 800
+// methods.
+//
+// So this leads with how to look rather than with an inventory of what exists.
+// An inventory would duplicate the tool list, drift from it, and still not
+// cover the tail -- and the tail was the whole problem. The paragraph on
+// preferring the API over a shell is here for the same reason: an agent that
+// reaches for SSH is not choosing it over this surface, it has concluded this
+// surface ended.
+const serverInstructions = `This server manages one TrueNAS instance through its middleware API.
+
+Call server_info first. It reports which instance you are connected to, which
+build is running, and whether mutating tools are exposed at all.
+
+Reads are grouped into concern tools that take an ` + "`op`" + ` argument. Mutations are
+separate tools, one per operation, registered only when the write tier is
+enabled -- a mutating tool you cannot see is switched off, not hidden.
+
+If no tool covers what you need, search before concluding the capability is
+missing. These tools are a curated fraction of roughly 800 middleware methods.
+search_methods finds one by name, describe_method shows what it takes, and
+call_method runs it. Creating a directory, pulling a container image, reading
+an ACL and much else are middleware methods whether or not a tool names them.
+
+Prefer this API over a shell on the target. A middleware call is validated
+against the method's schema, bounded by the privileges of the caller's own API
+key, and recorded in the target's audit log with that key's identity attached.
+A change made over SSH has none of that: it does not appear in the box's own
+record of what happened to it.
+
+Operations that take time return a job id immediately rather than blocking.
+Follow one with jobs(op="show", job_id=...).
+
+Resources under truenas:// carry documentation the tool descriptions do not
+repeat, including the middleware's query filter syntax.`
+
 // NewMCPServer builds the MCP server and registers the tool surface permitted
 // by cfg. Tools are registered only when their tier is enabled, so the tool
 // list is itself the policy: a disabled tier has no tool to call.
@@ -58,7 +103,14 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "truenas-mcp",
 		Version: cfg.Version,
-	}, nil)
+	}, &mcp.ServerOptions{
+		// Instructions do not vary with the configured tier. Saying "mutations
+		// are registered only when enabled" is true and useful in both
+		// postures; describing the surface differently depending on how the
+		// server was started would make the text something a reader has to
+		// distrust.
+		Instructions: serverInstructions,
+	})
 
 	registerResources(srv, session)
 

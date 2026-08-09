@@ -18,6 +18,32 @@ The server SHALL serve MCP over an HTTP transport on a configurable bind address
 - **WHEN** the operator configures a bind address and port
 - **THEN** the server listens on exactly that address and port
 
+### Requirement: State the shape of the surface at initialize
+
+The server SHALL return instructions when a session is initialized, describing how the tool surface is organized and how to reach middleware methods that no tool names.
+
+The instructions SHALL state that the tools are a bounded subset of the target's methods and SHALL name the operations that search, describe, and invoke the remainder, so that a client cannot correctly conclude from the tool list alone that an absent tool means an absent capability.
+
+The instructions SHALL NOT enumerate the individual tools, which the tool list already carries and which would drift from it.
+
+#### Scenario: Client initializes a session
+
+- **WHEN** a client completes initialization
+- **THEN** the response carries instructions describing the surface
+- **AND** the instructions name how to find, describe, and invoke a method that no tool exposes
+
+#### Scenario: Capability appears absent from the tool list
+
+- **WHEN** a client needs an operation that no registered tool performs
+- **THEN** the instructions direct it to search the middleware's methods
+- **AND** the instructions state that reaching the target outside this API forfeits schema validation, privilege bounding, and the target's audit record
+
+#### Scenario: Instructions do not depend on the configured tier
+
+- **WHEN** the server is started with the write tier enabled and with it disabled
+- **THEN** the instructions are the same in both cases
+- **AND** they describe mutating tools as registered only when that tier is enabled
+
 ### Requirement: Authenticate each session with a caller-supplied TrueNAS credential
 
 Each client SHALL supply a TrueNAS username and API key when establishing a session. The server SHALL NOT hold a TrueNAS credential of its own and SHALL NOT fall back to one.
