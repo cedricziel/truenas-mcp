@@ -207,3 +207,95 @@ func TestCatalogListNarrowedByCategorySendsMembershipFilter(t *testing.T) {
 		t.Errorf("expected the membership operator to reach the target, got params %s", raw)
 	}
 }
+
+// TestCatalogCategoriesReachesCaller is the end-to-end counterpart to
+// TestCatalogCategoriesTakesNoArgument: it proves the vocabulary app.categories
+// hands back actually reaches a caller through catalog(op="categories"), which
+// is the entire point of the op -- a caller must not have to guess a category
+// name and misread an empty list result as "nothing installed" rather than
+// "wrong word".
+func TestCatalogCategoriesReachesCaller(t *testing.T) {
+	target := newFakeTarget(t)
+	target.respond("app.categories", []string{"media", "productivity", "networking"})
+	client := discoveryClient(t, discoverySession(t, target), false)
+
+	res, err := client.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "catalog",
+		Arguments: map[string]any{"op": "categories"},
+	})
+	if err != nil {
+		t.Fatalf("call catalog: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("catalog returned an error: %v", res.Content)
+	}
+
+	out, ok := res.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content, got %T", res.StructuredContent)
+	}
+
+	items, ok := out["result"].([]any)
+	if !ok {
+		t.Fatalf("expected result to be a list, got %T", out["result"])
+	}
+	want := []string{"media", "productivity", "networking"}
+	if len(items) != len(want) {
+		t.Fatalf("result has %d items, want %d", len(items), len(want))
+	}
+	for i, v := range want {
+		if items[i] != v {
+			t.Errorf("result[%d] = %v, want %q", i, items[i], v)
+		}
+	}
+}
+
+// TestCatalogListFullReturnsCompleteRecords is the server-level counterpart to
+// TestCatalogListProjectsIdentityAndVersionFields: that test proves the concern
+// declares a projection, this one proves full=true actually bypasses it end to
+// end -- app_readme and description, dropped by default, must survive when a
+// caller explicitly asks for everything.
+func TestCatalogListFullReturnsCompleteRecords(t *testing.T) {
+	target := newFakeTarget(t)
+	target.respond("app.available", []map[string]any{
+		catalogFixture("plex", "media", false),
+		catalogFixture("jellyfin", "media", true),
+	})
+	client := discoveryClient(t, discoverySession(t, target), false)
+
+	res, err := client.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "catalog",
+		Arguments: map[string]any{"op": "list", "full": true},
+	})
+	if err != nil {
+		t.Fatalf("call catalog: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("catalog returned an error: %v", res.Content)
+	}
+
+	out, ok := res.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content, got %T", res.StructuredContent)
+	}
+	if projected, _ := out["projected"].(bool); projected {
+		t.Error("projected must be false: full=true must bypass the projection entirely")
+	}
+
+	items, ok := out["result"].([]any)
+	if !ok || len(items) != 2 {
+		t.Fatalf("expected 2 entries, got %#v", out["result"])
+	}
+	for _, raw := range items {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("expected item to be an object, got %T", raw)
+		}
+		if _, ok := entry["app_readme"]; !ok {
+			t.Error("full=true must return app_readme -- the projection normally drops it")
+		}
+		if _, ok := entry["description"]; !ok {
+			t.Error("full=true must return description -- the projection normally drops it")
+		}
+	}
+}
