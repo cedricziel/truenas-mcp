@@ -33,5 +33,5 @@
 - [x] 5.1 Run `make format`, `make lint`, `go test ./...`, and `go vet -tags=integration ./internal/tools/`; all must pass.
 - [x] 5.2 Update README.md if it enumerates the read operations.
 - [x] 5.3 Verify against the live target if credentials are available; if not, say so plainly rather than implying it was exercised. The available target runs the pre-feature build (`ac7d2c6`), so this change could not be exercised there.
-- [ ] 5.4 Sync the delta specs into `openspec/specs/` and archive the change.
-- [ ] 5.5 Commit in reviewable pieces — client subscriptions, the collector, then the operation — and open a PR.
+- [x] 5.4 Sync the delta specs into `openspec/specs/` and archive the change.
+- [x] 5.5 Commit in reviewable pieces — client subscriptions, the collector, then the operation — and open a PR.
