@@ -74,6 +74,27 @@ Method description SHALL return the commonly-used arguments, a worked example, a
 - **WHEN** the target's schema for a method changes between API versions
 - **THEN** the summarized field selection reflects the new schema without a change to the server
 
+### Requirement: Attach curated caveats to methods whose own description omits a material property of the call
+
+The server SHALL attach a curated caveat to a method description or invocation when the method's own description omits a property of the call that a caller cannot infer from the argument schema. The set of caveats SHALL be small and individually curated rather than inferred, and a method with no established caveat SHALL carry none.
+
+#### Scenario: Describing a method that has a caveat
+
+- **WHEN** a method with an established caveat is described
+- **THEN** the response includes the caveat alongside the method's own description
+
+#### Scenario: Invoking a method that has a caveat
+
+- **WHEN** a method with an established caveat is invoked
+- **AND** describe_method was not called first
+- **THEN** the response includes the caveat
+- **AND** the caveat is present together with any job follow-up note, rather than one replacing the other
+
+#### Scenario: Describing a method that has none
+
+- **WHEN** a method with no established caveat is described
+- **THEN** the response contains no caveat field
+
 ### Requirement: Report invocation failures distinctly from refusals
 
 Discovery invocation SHALL distinguish a server-side refusal from a failure reported by the target.
