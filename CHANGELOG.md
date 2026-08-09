@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/cedricziel/truenas-mcp/compare/v0.2.3...v0.2.4) (2026-08-09)
+
+
+### Bug Fixes
+
+* let limit bound every read op, not just the three that declared it ([#16](https://github.com/cedricziel/truenas-mcp/issues/16)) ([33c10b4](https://github.com/cedricziel/truenas-mcp/commit/33c10b455cd541351f1ceb22c69e7b6b9b797006))
+
 ## [0.2.3](https://github.com/cedricziel/truenas-mcp/compare/v0.2.2...v0.2.3) (2026-08-09)
 
 
