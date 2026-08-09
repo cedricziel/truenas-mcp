@@ -105,6 +105,70 @@ func TestMiddlewareParamsPositionalWinsOverDeclaredFilter(t *testing.T) {
 	}
 }
 
+// TestMiddlewareParamsEmitsDeclaredOptionsWithCallerLimit proves an
+// Options-declaring op sends a single object parameter -- not an empty
+// parameter list, which is the original audit_log defect -- carrying its
+// declared parts plus the caller's own limit merged into
+// query-options.limit. audit.query needs this bound present before the
+// target accepts the call at all, so it has to travel upstream rather than
+// being applied to the response the way shape() applies limit everywhere
+// else.
+func TestMiddlewareParamsEmitsDeclaredOptionsWithCallerLimit(t *testing.T) {
+	op := tools.Op{
+		Name:   "audit_log",
+		Method: "audit.query",
+		Options: map[string]any{
+			"query-options": map[string]any{
+				"order_by": []string{"-message_timestamp"},
+			},
+		},
+	}
+	in := DispatchInput{Op: "audit_log", Limit: 7}
+
+	got := middlewareParams(&op, in)
+	want := []any{map[string]any{
+		"query-options": map[string]any{
+			"order_by": []string{"-message_timestamp"},
+			"limit":    7,
+		},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("middlewareParams = %#v, want %#v", got, want)
+	}
+
+	// The op's own declaration must come back untouched: Options lives on a
+	// Concern built once at startup and reused for every call this
+	// operation ever serves, so merging the limit in place would leak one
+	// caller's limit into the next caller's request.
+	orig := op.Options["query-options"].(map[string]any)
+	if _, ok := orig["limit"]; ok {
+		t.Error("middlewareParams must not mutate the op's declared Options in place")
+	}
+}
+
+// TestMiddlewareParamsEmitsDefaultLimitWhenCallerSuppliesNone proves the
+// limit merged into query-options is the same effective limit shape() would
+// use elsewhere -- the caller's own limit when supplied, otherwise
+// defaultLimit -- rather than some other default drifting out of sync with
+// it.
+func TestMiddlewareParamsEmitsDefaultLimitWhenCallerSuppliesNone(t *testing.T) {
+	op := tools.Op{
+		Name:    "audit_log",
+		Method:  "audit.query",
+		Options: map[string]any{"query-options": map[string]any{}},
+	}
+	in := DispatchInput{Op: "audit_log"}
+
+	got := middlewareParams(&op, in)
+	want := []any{map[string]any{
+		"query-options": map[string]any{"limit": defaultLimit},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("middlewareParams = %#v, want %#v -- no caller limit must fall back to "+
+			"defaultLimit, the same bound shape() uses", got, want)
+	}
+}
+
 // TestLimitIsNeverRefused is the regression test for the defect this fix
 // addresses: limit used to be forwarded into the tools.Args map like a
 // narrowing argument (pool, dataset), which meant Concern.Resolve refused it

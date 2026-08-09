@@ -82,6 +82,8 @@ When the configured API key lacks privilege for a requested operation, the serve
 
 Read operations SHALL return results shaped for the question being asked rather than the target's unmodified response, and SHALL bound result size.
 
+Reporting a total or a truncation flag requires the server to know the size of the underlying collection, not merely the size of what it returned. When an operation bounds its result by sending the limit to the target as part of the call, rather than requesting the complete collection and cutting it down to size itself, the server has only ever seen one page and cannot state the collection's real size or say whether more records exist beyond that page. Such an operation SHALL omit the total and the truncation flag rather than derive them from the page, since deriving them from the page states a specific number or flag with the same confidence as a correct one while actually being an unverified guess.
+
 #### Scenario: Large collection returned
 
 - **WHEN** an operation would return more items than the configured result limit
@@ -93,6 +95,12 @@ Read operations SHALL return results shaped for the question being asked rather 
 - **WHEN** the target returns a payload containing fields irrelevant to the operation
 - **THEN** the server returns the fields relevant to the operation
 - **AND** the response indicates how to retrieve the complete record
+
+#### Scenario: Bound applied by the target rather than by the server
+
+- **WHEN** an operation sends the caller's effective limit to the target as part of the call, so that the target itself decides which records to return
+- **THEN** the server does not report a total
+- **AND** the server does not report whether the result was truncated
 
 ### Requirement: Response-shaping arguments apply uniformly across a concern's operations
 

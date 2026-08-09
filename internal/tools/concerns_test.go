@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -274,6 +275,81 @@ func TestCatalogCategoriesTakesNoArgument(t *testing.T) {
 	}
 	if len(categories.Args) != 0 || len(categories.Filters) != 0 {
 		t.Errorf("categories op accepts %v/%v, want no arguments", categories.Args, categories.Filters)
+	}
+}
+
+// audit.query rejects any call whose object parameter carries no
+// query-options bound at all -- verified live against TrueNAS 26: no
+// parameters, {}, and even {"query-options":{}} all return -32602 Invalid
+// params, while {"query-options":{"limit":N}} succeeds. Options is how the
+// op declares the parts of that object that stay constant across every
+// call. The bound itself is deliberately not one of them: server.
+// middlewareParams merges the caller's effective limit into
+// Options["query-options"]["limit"] at dispatch time, and an op that pinned
+// its own limit here would silently cap a caller who explicitly asked for
+// more -- exactly the defect a declared, dispatcher-filled limit exists to
+// avoid.
+//
+// order_by is declared for a different, equally load-bearing reason: without
+// it audit.query returns the OLDEST records first, which is backwards for an
+// op whose whole purpose is "what changed recently".
+// An audit record carries roughly 1,200 characters, most of it a service_data
+// credentials blob repeated on every row. A default page of 50 is therefore
+// about 60KB -- the apps.list failure again, and invisible until now only
+// because this op returned an error instead of a payload. Fixing the call
+// without projecting it would have shipped one bug to expose another.
+func TestAuditLogProjectsAwayTheBulk(t *testing.T) {
+	auditLog := findOp(System(), "audit_log")
+	if auditLog == nil {
+		t.Fatal("system concern must expose an audit_log op")
+	}
+	if len(auditLog.Project) == 0 {
+		t.Fatal("audit_log must declare a projection: a default page of full audit records " +
+			"is ~60KB, and an op a caller cannot afford to call gets called once, expensively")
+	}
+
+	// What the op claims to answer -- when, what, by whom, and whether it
+	// worked -- has to survive the projection, or it reduces the wrong thing.
+	for _, field := range []string{"message_timestamp", "event", "username", "success", "event_data"} {
+		if !slices.Contains(auditLog.Project, field) {
+			t.Errorf("audit_log projection drops %q, which is part of the question it answers: %v",
+				field, auditLog.Project)
+		}
+	}
+
+	// service_data is the bulk and is duplicated from event_data on the
+	// authentication rows. full=true still returns it, which is where a
+	// caller goes to learn which API key acted.
+	if slices.Contains(auditLog.Project, "service_data") {
+		t.Error("audit_log projection keeps service_data, which is the bulk it exists to drop")
+	}
+}
+
+func TestAuditLogDeclaresOrderButNotLimit(t *testing.T) {
+	auditLog := findOp(System(), "audit_log")
+	if auditLog == nil {
+		t.Fatal("system concern must expose an audit_log op")
+	}
+	if auditLog.Options == nil {
+		t.Fatal("audit_log must declare Options: audit.query returns -32602 Invalid params " +
+			"for a call whose object parameter carries no query-options bound")
+	}
+
+	qo, ok := auditLog.Options["query-options"].(map[string]any)
+	if !ok {
+		t.Fatalf("audit_log Options must declare a query-options object, got %#v", auditLog.Options)
+	}
+
+	orderBy, ok := qo["order_by"].([]string)
+	if !ok || len(orderBy) != 1 || orderBy[0] != "-message_timestamp" {
+		t.Errorf("audit_log must order by -message_timestamp, so recent entries come first "+
+			"instead of the oldest ones audit.query returns by default; got %#v", qo["order_by"])
+	}
+
+	if _, ok := qo["limit"]; ok {
+		t.Error("audit_log must not hardcode a limit in Options: the limit travels from the " +
+			"caller's effective limit at dispatch time, and a static one here would silently " +
+			"cap a caller who asked for more")
 	}
 }
 

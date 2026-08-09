@@ -53,6 +53,31 @@ type Op struct {
 	// a property of the operation that declares it -- the same argument name
 	// can be positional on one operation (Args) and a filter on another.
 	Filters []Filter
+
+	// Options is the middleware options object this operation always sends,
+	// for a method that refuses a call whose object parameter carries no
+	// bound at all rather than accepting a bare filter list or no parameters.
+	// audit.query is the reason this exists: verified live against TrueNAS
+	// 26, it returns -32602 Invalid params for no parameters, for {}, and
+	// even for {"query-options":{}} -- query-options must be present and
+	// must itself carry a bound such as limit before the target accepts the
+	// call at all. describe_method reports zero required parameters for it,
+	// so nothing in the middleware's own introspection says this.
+	//
+	// Because the bound has to be present for the call to succeed, it cannot
+	// be applied the way shape() applies limit to every other operation's
+	// response -- after the fact, locally. It has to travel to the target
+	// instead, which server.middlewareParams does by merging the caller's
+	// effective limit into Options["query-options"]["limit"] at dispatch
+	// time. Options itself declares only what stays constant across every
+	// call, such as ordering; it must never carry a limit of its own; a
+	// hardcoded one would silently cap a caller who asked for more.
+	//
+	// An operation that declares Options is also telling shape() something
+	// it cannot learn from the response alone: that the size limit was
+	// enforced by the target, not applied locally to a complete answer. See
+	// shape()'s boundAtTarget parameter for what that changes.
+	Options map[string]any
 }
 
 // Filter declares one argument as a middleware query filter: which argument

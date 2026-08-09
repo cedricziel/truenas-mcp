@@ -88,6 +88,53 @@ func System() *Concern {
 				Name:    "audit_log",
 				Summary: "recent audited actions, for seeing what changed on the system",
 				Method:  "audit.query",
+				// audit.query rejects a call whose object parameter carries no
+				// query-options bound at all -- verified live against TrueNAS
+				// 26: no parameters, {}, {"services":[...]}, and even
+				// {"query-options":{}} all return -32602 Invalid params, while
+				// {"query-options":{"limit":N}} succeeds. describe_method
+				// reports zero required parameters for this method, so nothing
+				// in the middleware's own introspection says this -- it was
+				// found by probing the live target.
+				//
+				// Options declares the parts of that object that stay constant
+				// across every call. The bound itself is deliberately not one
+				// of them: server.middlewareParams merges the caller's
+				// effective limit into query-options.limit at dispatch time,
+				// because that limit has to travel to the target rather than
+				// being applied to the response the way shape() bounds every
+				// other operation -- the target refuses the call before there
+				// is any response to bound. A limit hardcoded here would
+				// silently cap a caller who explicitly asked for more.
+				//
+				// order_by is unconditional rather than caller-controlled for
+				// a different reason: without it, audit.query returns the
+				// OLDEST records first, backwards for an op whose whole point
+				// is "what changed recently".
+				Options: map[string]any{
+					"query-options": map[string]any{
+						"order_by": []string{"-message_timestamp"},
+					},
+				},
+				// An audit record runs to roughly 1,200 characters, most of
+				// it a service_data credentials blob repeated verbatim on
+				// every row and, on authentication rows, duplicated from
+				// event_data. A default page of 50 is therefore about 60KB.
+				// That is the apps.list failure again; it stayed invisible
+				// only because this op returned -32602 rather than a payload,
+				// so fixing the call without projecting it would have traded
+				// one bug for another.
+				//
+				// What survives is the question the summary promises -- when,
+				// what, by whom, from where, and whether it worked.
+				// event_data stays because it carries the method name and the
+				// human-readable description, which is the "what". full=true
+				// returns service_data, which is where a caller goes to learn
+				// which API key acted rather than merely which user.
+				Project: []string{
+					"message_timestamp", "event", "username",
+					"address", "service", "success", "event_data",
+				},
 			},
 		},
 	}
