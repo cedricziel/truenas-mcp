@@ -208,3 +208,58 @@ An operation whose upstream collection is large enough that returning it whole w
 - **WHEN** a caller requests the unreduced form of a projected operation
 - **THEN** the server returns every field of each entry
 
+### Requirement: Serve a read operation from an event source where the target exposes no method
+
+A read operation MAY be served by a middleware event source rather than a
+method, where the target exposes the capability only that way. Such an operation
+SHALL retain the same concern-op interface, read-only annotation, and result
+shaping as other read operations. A caller SHALL NOT need to know which transport
+serves an operation.
+
+#### Scenario: Operation backed by an event source
+
+- **WHEN** a caller invokes a read operation whose data comes from an event source
+- **THEN** it returns data in the same shape as any other read operation and is read-only
+
+#### Scenario: Event source refuses the request
+
+- **WHEN** an event source refuses a request because its preconditions are unmet
+- **THEN** the server returns that refusal rather than an empty result
+
+### Requirement: Bound text-producing operations by size as well as count
+
+An operation returning lines of free text SHALL bound its result by total size
+in addition to any count, and SHALL report which bound it applied. A single line
+that exceeds the size bound SHALL not make the response unbounded; the response
+SHALL state that its content was withheld.
+
+#### Scenario: Requested count reached before the size bound
+
+- **WHEN** the requested number of lines is returned without exceeding the size bound
+- **THEN** the response indicates it was bounded by count
+
+#### Scenario: Size bound reached before the requested count
+
+- **WHEN** accumulated text reaches the size bound before the requested count
+- **THEN** the response contains gathered lines and indicates the size bound
+
+#### Scenario: A single line exceeds the size bound
+
+- **WHEN** one line alone exceeds the size bound
+- **THEN** its content is withheld and the response remains bounded
+
+### Requirement: Return log content with target-supplied timestamps
+
+An operation returning log output SHALL return each entry's timestamp alongside
+its content when the target supplies one. The server SHALL NOT maintain
+per-caller position state across calls.
+
+#### Scenario: Entries carry timestamps
+
+- **WHEN** log entries are returned and the target supplied timestamps
+- **THEN** each entry includes its timestamp
+
+#### Scenario: Calling again
+
+- **WHEN** a caller invokes the operation a second time
+- **THEN** it receives the current tail rather than only new entries
