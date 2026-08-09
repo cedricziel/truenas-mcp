@@ -305,10 +305,11 @@ boot detach, snapshot destruction — and `app.delete` with `remove_ixvolumes`,
 because the danger there is in the argument, not the method. None of this is
 switchable; use the web interface.
 
-**On app logs:** TrueNAS 26 exposes no JSON-RPC method that returns container
-log output — the web UI streams it over a separate channel. `apps containers`
-returns the container identities such a transport would need, and is useful on
-its own. Log streaming is tracked as future work.
+**On app logs:** TrueNAS exposes container output through the
+`app.container_log_follow` event source rather than a JSON-RPC method.
+`apps(op="logs", name=...)` returns a bounded timestamped tail, not a live
+follow. When an app has multiple containers, first call `apps(op="containers",
+name=...)` and pass one returned ID as `container`.
 
 ### The discovery escape hatch
 

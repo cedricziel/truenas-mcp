@@ -206,16 +206,24 @@ func Apps() *Concern {
 				Summary: "host ports already taken, useful before exposing a new app",
 				Method:  "app.used_ports",
 			},
-			// The closest the middleware gets to logs. TrueNAS 26 exposes no
-			// JSON-RPC method returning container log output -- the web UI
-			// streams it over a separate channel -- so this returns the
-			// container identities a log transport would need, and is useful
-			// on its own for "which containers does this app actually run".
+			// TrueNAS exposes no JSON-RPC method returning container log output;
+			// logs are available from the app.container_log_follow event source.
+			// This still returns the container identities a caller can select.
 			{
 				Name:     "containers",
 				Summary:  "the containers an app runs, with their service names and IDs",
 				Method:   "app.container_ids",
 				Args:     []string{"name"},
+				Required: []string{"name"},
+			},
+			// Logs are deliberately the one event-source-backed operation rather
+			// than a general declaration mechanism: one source is not enough
+			// evidence to design an abstraction for every future source. Its empty
+			// Method tells the dispatcher to take this explicit path.
+			{
+				Name:     "logs",
+				Summary:  "the bounded tail of one app container's logs, with timestamps",
+				Args:     []string{"name", "container"},
 				Required: []string{"name"},
 			},
 			// A moving tag such as :main says nothing about identity, which is

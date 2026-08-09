@@ -26,7 +26,7 @@ func TestConcernsAreWellFormed(t *testing.T) {
 				if op.Summary == "" {
 					t.Errorf("operation %q needs a summary: it is what a model selects on", op.Name)
 				}
-				if op.Method == "" {
+				if op.Method == "" && (c.Name != "apps" || op.Name != "logs") {
 					t.Errorf("operation %q has no middleware method", op.Name)
 				}
 
@@ -119,6 +119,22 @@ func TestAppsExposesLifecycleReads(t *testing.T) {
 		if !names[required] {
 			t.Errorf("apps concern must expose %q so a caller can decide before mutating", required)
 		}
+	}
+}
+
+func TestAppsLogsIsAnEventSourceOperation(t *testing.T) {
+	logs := findOp(Apps(), "logs")
+	if logs == nil {
+		t.Fatal("apps concern must expose a logs operation")
+	}
+	if logs.Method != "" {
+		t.Errorf("logs Method = %q, want empty because logs come from an event source", logs.Method)
+	}
+	if !slices.Contains(logs.Args, "name") || !slices.Contains(logs.Args, "container") {
+		t.Errorf("logs Args = %v, want name and optional container", logs.Args)
+	}
+	if len(logs.Required) != 1 || logs.Required[0] != "name" {
+		t.Errorf("logs Required = %v, want [name]", logs.Required)
 	}
 }
 
