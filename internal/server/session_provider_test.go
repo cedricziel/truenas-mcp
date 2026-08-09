@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -24,6 +25,9 @@ import (
 type fakeTarget struct {
 	srv   *httptest.Server
 	conns atomic.Int32
+
+	mu        sync.Mutex
+	responses map[string]json.RawMessage
 }
 
 const fakeTargetAPIKey = "1-validkey"
@@ -57,14 +61,18 @@ func newFakeTarget(t *testing.T) *fakeTarget {
 				Result  json.RawMessage `json:"result,omitempty"`
 			}{JSONRPC: "2.0", ID: req.ID}
 
-			switch req.Method {
-			case "auth.login_with_api_key":
-				var args []string
-				_ = json.Unmarshal(req.Params, &args)
-				ok := len(args) == 1 && args[0] == fakeTargetAPIKey
-				resp.Result, _ = json.Marshal(ok)
-			case "system.version":
-				resp.Result, _ = json.Marshal("TrueNAS-25.04.0")
+			if custom, ok := f.customResponse(req.Method); ok {
+				resp.Result = custom
+			} else {
+				switch req.Method {
+				case "auth.login_with_api_key":
+					var args []string
+					_ = json.Unmarshal(req.Params, &args)
+					ok := len(args) == 1 && args[0] == fakeTargetAPIKey
+					resp.Result, _ = json.Marshal(ok)
+				case "system.version":
+					resp.Result, _ = json.Marshal("TrueNAS-25.04.0")
+				}
 			}
 			if err := conn.WriteJSON(resp); err != nil {
 				return
@@ -73,6 +81,31 @@ func newFakeTarget(t *testing.T) *fakeTarget {
 	}))
 	t.Cleanup(f.srv.Close)
 	return f
+}
+
+// respond registers a canned result for a method beyond the built-in
+// auth.login_with_api_key and system.version handling every session needs.
+// Tests that exercise more of the middleware surface -- core.get_methods, a
+// job-starting call -- add just the method they need rather than growing
+// their own websocket fake.
+func (f *fakeTarget) respond(method string, result any) {
+	raw, err := json.Marshal(result)
+	if err != nil {
+		panic(err) // test setup only
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.responses == nil {
+		f.responses = map[string]json.RawMessage{}
+	}
+	f.responses[method] = raw
+}
+
+func (f *fakeTarget) customResponse(method string) (json.RawMessage, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	raw, ok := f.responses[method]
+	return raw, ok
 }
 
 // URL is the ws:// endpoint SessionManager should dial.

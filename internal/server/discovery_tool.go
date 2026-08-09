@@ -19,13 +19,18 @@ type DescribeInput struct {
 
 // DescribeOutput summarises a method rather than dumping its schema.
 type DescribeOutput struct {
-	Method      string            `json:"method"`
-	Description string            `json:"description,omitempty"`
-	Job         bool              `json:"job,omitempty" jsonschema:"whether this starts a long-running job"`
-	ReadOnly    bool              `json:"read_only" jsonschema:"whether the method only reads state"`
-	Params      []tools.FlatParam `json:"params"`
-	Omitted     int               `json:"omitted_optional_params,omitempty" jsonschema:"optional params left out; pass full=true for all"`
-	Example     string            `json:"example,omitempty"`
+	Method      string `json:"method"`
+	Description string `json:"description,omitempty"`
+	// Caveat is a fact about this call that Description omits and a caller
+	// cannot infer from Params -- present only for the handful of methods
+	// where that gap has been individually established, see
+	// tools.MethodCaveat.
+	Caveat   string            `json:"caveat,omitempty" jsonschema:"a fact about this call that the method's description does not mention, present only when one has been established"`
+	Job      bool              `json:"job,omitempty" jsonschema:"whether this starts a long-running job"`
+	ReadOnly bool              `json:"read_only" jsonschema:"whether the method only reads state"`
+	Params   []tools.FlatParam `json:"params"`
+	Omitted  int               `json:"omitted_optional_params,omitempty" jsonschema:"optional params left out; pass full=true for all"`
+	Example  string            `json:"example,omitempty"`
 }
 
 // SearchInput finds methods by substring.
@@ -144,6 +149,7 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 		return nil, DescribeOutput{
 			Method:      in.Method,
 			Description: meta.Description,
+			Caveat:      tools.MethodCaveat(in.Method),
 			Job:         meta.Job,
 			ReadOnly:    meta.readOnly(),
 			Params:      summary.Params,
@@ -183,6 +189,11 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 			return toolError(err.Error()), CallOutput{}, nil
 		}
 
+		// describe_method is skippable -- an agent may call a method it found
+		// through search_methods without ever describing it first -- so any
+		// caveat has to reach this path too, not just describe_method's.
+		caveat := tools.MethodCaveat(in.Method)
+
 		// A job method must not block the tool call.
 		if meta.Job {
 			id, err := s.Client().CallJob(ctx, in.Method, in.Params...)
@@ -192,7 +203,7 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 			return nil, CallOutput{
 				Method: in.Method,
 				JobID:  id,
-				Note:   "Started; follow it with jobs(op=\"show\", job_id=...).",
+				Note:   composeNote(caveat, "Started; follow it with jobs(op=\"show\", job_id=...)."),
 			}, nil
 		}
 
@@ -204,8 +215,23 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 		if err := json.Unmarshal(raw, &result); err != nil {
 			result = string(raw)
 		}
-		return nil, CallOutput{Method: in.Method, Result: result}, nil
+		return nil, CallOutput{Method: in.Method, Result: result, Note: composeNote(caveat, "")}, nil
 	})
+}
+
+// composeNote joins a method's caveat with call_method's own follow-up note
+// so neither overwrites the other: a caveated job method needs both the
+// warning about how it was called and the pointer to where its result shows
+// up.
+func composeNote(caveat, followUp string) string {
+	switch {
+	case caveat == "":
+		return followUp
+	case followUp == "":
+		return caveat
+	default:
+		return caveat + " " + followUp
+	}
 }
 
 // rawMethodMeta is the introspection payload this server relies on.
