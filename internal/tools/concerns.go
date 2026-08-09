@@ -33,7 +33,7 @@ func Storage() *Concern {
 				Name:    "list_datasets",
 				Summary: "datasets with usage; narrow with pool",
 				Method:  "pool.dataset.query",
-				Args:    []string{"pool"},
+				Filters: []Filter{{Arg: "pool", Field: "pool", Operator: "="}},
 			},
 			{
 				Name:     "show_dataset",
@@ -46,7 +46,7 @@ func Storage() *Concern {
 				Name:    "list_snapshots",
 				Summary: "snapshots; narrow with dataset",
 				Method:  "pool.snapshot.query",
-				Args:    []string{"dataset"},
+				Filters: []Filter{{Arg: "dataset", Field: "dataset", Operator: "="}},
 			},
 		},
 	}

@@ -30,10 +30,16 @@ func TestConcernsAreWellFormed(t *testing.T) {
 				}
 
 				// A required argument the operation does not accept can never
-				// be satisfied, so Resolve would reject every call.
+				// be satisfied, so Resolve would reject every call. Accepted
+				// covers both roles an argument can be declared under -- Args
+				// for a positional identifier, Filters for a query filter --
+				// since Resolve itself accepts either.
 				accepts := map[string]bool{}
 				for _, a := range op.Args {
 					accepts[a] = true
+				}
+				for _, f := range op.Filters {
+					accepts[f.Arg] = true
 				}
 				for _, r := range op.Required {
 					if !accepts[r] {
