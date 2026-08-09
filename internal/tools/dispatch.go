@@ -37,6 +37,13 @@ type Op struct {
 
 	// Required are the argument names this operation cannot run without.
 	Required []string
+
+	// Project names the fields a list-shaped result is reduced to by default.
+	// Unset means the full middleware object is returned, which stays the
+	// right default for anything that is not already known to be large: a
+	// declared projection is a claim that these particular fields are what
+	// answers the question, and that claim should not be guessed.
+	Project []string
 }
 
 // Concern is a user-facing grouping of read operations, exposed as one tool.

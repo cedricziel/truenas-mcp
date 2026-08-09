@@ -114,3 +114,71 @@ func TestAppsExposesLifecycleReads(t *testing.T) {
 		}
 	}
 }
+
+// The correlation between a container's tag and an image's digest, and the
+// choice between this op and outdated_images, have to live in the Summary
+// itself -- that is the only thing a model reads before picking an op.
+func TestAppsExposesImageDigests(t *testing.T) {
+	images := findOp(Apps(), "images")
+	if images == nil {
+		t.Fatal(`apps concern must expose an "images" op resolving what a container actually runs`)
+	}
+	if images.Method != "app.image.query" {
+		t.Errorf("images op method = %q, want app.image.query", images.Method)
+	}
+	if len(images.Required) != 0 {
+		t.Errorf("images op requires %v, but app.image.query takes no name filter", images.Required)
+	}
+
+	for _, term := range []string{"repo_tags", "update_available", "outdated_images"} {
+		if !strings.Contains(images.Summary, term) {
+			t.Errorf("images op summary must mention %q so the correlation is discoverable, got: %s", term, images.Summary)
+		}
+	}
+
+	want := map[string]bool{"id": true, "repo_tags": true, "repo_digests": true, "update_available": true}
+	if len(images.Project) != len(want) {
+		t.Fatalf("images op projects %v, want exactly %d fields", images.Project, len(want))
+	}
+	for _, f := range images.Project {
+		if !want[f] {
+			t.Errorf("images op projects unexpected field %q", f)
+		}
+	}
+}
+
+func findOp(c *Concern, name string) *Op {
+	for i := range c.Ops {
+		if c.Ops[i].Name == name {
+			return &c.Ops[i]
+		}
+	}
+	return nil
+}
+
+// Each of the 50 items app.query returns by default was a whole app.query
+// object -- roughly 4KB apiece, almost all of it active_workloads -- which is
+// what blew a caller's token budget. The projection names the fields that
+// answer "what is installed, what state is it in, and does it need updating".
+// The last of those is not optional: the concern describes itself as covering
+// what needs updating, so a summary that cannot answer it forces a second
+// full-object call to learn what the first one already knew.
+func TestAppsListProjectsStateAndUpdateStatus(t *testing.T) {
+	list := findOp(Apps(), "list")
+	if list == nil {
+		t.Fatal("apps concern must expose a list op")
+	}
+
+	want := map[string]bool{
+		"name": true, "state": true, "version": true,
+		"upgrade_available": true, "image_updates_available": true,
+	}
+	if len(list.Project) != len(want) {
+		t.Fatalf("list op projects %v, want exactly %d fields", list.Project, len(want))
+	}
+	for _, f := range list.Project {
+		if !want[f] {
+			t.Errorf("list op projects unexpected field %q", f)
+		}
+	}
+}
