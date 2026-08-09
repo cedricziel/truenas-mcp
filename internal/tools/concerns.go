@@ -127,8 +127,9 @@ func Apps() *Concern {
 				Required: []string{"name"},
 			},
 			{
-				Name:     "config",
-				Summary:  "an app's current configuration",
+				Name: "config",
+				Summary: "an app's current configuration; app.update expects this same object " +
+					"back in full as values, not a partial patch",
 				Method:   "app.config",
 				Args:     []string{"name"},
 				Required: []string{"name"},

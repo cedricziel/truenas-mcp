@@ -147,6 +147,21 @@ func TestAppsExposesImageDigests(t *testing.T) {
 	}
 }
 
+// app.update replaces the whole config rather than patching it -- a caveat
+// that lives on the middleware method, not on this read. A caller who reads
+// the config here should learn the contract for feeding it back in the same
+// place, rather than discovering it only after describe_method or a bad call.
+func TestAppsConfigSummaryPointsToUpdateContract(t *testing.T) {
+	config := findOp(Apps(), "config")
+	if config == nil {
+		t.Fatal("apps concern must expose a config op")
+	}
+	if !strings.Contains(config.Summary, "app.update") {
+		t.Errorf("config op summary must mention app.update, so reading the config also teaches "+
+			"its update contract, got: %s", config.Summary)
+	}
+}
+
 func findOp(c *Concern, name string) *Op {
 	for i := range c.Ops {
 		if c.Ops[i].Name == name {
