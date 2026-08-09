@@ -2,6 +2,7 @@ package truenas
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,9 @@ type fakeMiddleware struct {
 	// dropAfter closes the connection abruptly after this many requests,
 	// simulating a mid-flight interruption. Zero disables it.
 	dropAfter int
+	requests  []rpcRequest
+	conn      *websocket.Conn
+	writeMu   sync.Mutex
 }
 
 func newFakeMiddleware(t *testing.T) *fakeMiddleware {
@@ -38,6 +42,9 @@ func newFakeMiddleware(t *testing.T) *fakeMiddleware {
 		if err != nil {
 			return
 		}
+		f.mu.Lock()
+		f.conn = conn
+		f.mu.Unlock()
 		defer func() { _ = conn.Close() }()
 
 		for n := 1; ; n++ {
@@ -49,6 +56,7 @@ func newFakeMiddleware(t *testing.T) *fakeMiddleware {
 			f.mu.Lock()
 			h, ok := f.handlers[req.Method]
 			drop := f.dropAfter > 0 && n >= f.dropAfter
+			f.requests = append(f.requests, req)
 			f.mu.Unlock()
 
 			if drop {
@@ -68,7 +76,10 @@ func newFakeMiddleware(t *testing.T) *fakeMiddleware {
 					resp.Result = b
 				}
 			}
-			if err := conn.WriteJSON(resp); err != nil {
+			f.writeMu.Lock()
+			err := conn.WriteJSON(resp)
+			f.writeMu.Unlock()
+			if err != nil {
 				return
 			}
 		}
@@ -100,6 +111,36 @@ func (f *fakeMiddleware) setDropAfter(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.dropAfter = n
+}
+
+func (f *fakeMiddleware) emit(method string, params any) error {
+	f.mu.Lock()
+	conn := f.conn
+	f.mu.Unlock()
+	if conn == nil {
+		return fmt.Errorf("no client connection")
+	}
+
+	f.writeMu.Lock()
+	defer f.writeMu.Unlock()
+	return conn.WriteJSON(map[string]any{
+		"jsonrpc": "2.0",
+		"method":  method,
+		"params":  params,
+	})
+}
+
+func (f *fakeMiddleware) requestCount(method string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	count := 0
+	for _, req := range f.requests {
+		if req.Method == method {
+			count++
+		}
+	}
+	return count
 }
 
 // URL is the ws:// endpoint clients should dial.
