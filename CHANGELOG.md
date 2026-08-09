@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/cedricziel/truenas-mcp/compare/v0.3.1...v0.4.0) (2026-08-09)
+
+
+### Features
+
+* expose bounded app container logs ([#24](https://github.com/cedricziel/truenas-mcp/issues/24)) ([7046e7c](https://github.com/cedricziel/truenas-mcp/commit/7046e7cfff3fcf5e6e79597089ff587cf6221895))
+
+
+### Bug Fixes
+
+* emit object-form items so llama.cpp can parse the tool list ([#23](https://github.com/cedricziel/truenas-mcp/issues/23)) ([e73334a](https://github.com/cedricziel/truenas-mcp/commit/e73334a5adb6ba3f0101d4105a88dd45b4c51228))
+
 ## [0.3.1](https://github.com/cedricziel/truenas-mcp/compare/v0.3.0...v0.3.1) (2026-08-09)
 
 
