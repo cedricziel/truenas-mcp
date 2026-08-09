@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cedricziel/truenas-mcp/internal/tools"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -59,6 +60,81 @@ type CallOutput struct {
 	JobID  int64  `json:"job_id,omitempty" jsonschema:"set when the method started a job rather than returning a result"`
 	Result any    `json:"result,omitempty" jsonschema:"the method's return value, whatever shape it has"`
 	Note   string `json:"note,omitempty"`
+}
+
+// callMethodInputSchema infers CallInput's schema the ordinary way and then
+// repairs exactly one shape in the result: the element schema for Params
+// (a Go `any`, since a middleware method's positional arguments are
+// whatever that method declares) is JSON Schema's "matches anything",
+// which the underlying jsonschema-go library always renders as the bare
+// boolean `true` rather than the equally valid `{}` -- true and {} are the
+// same schema in draft 2020-12, "matches anything", but the library picks
+// the boolean spelling unconditionally for any empty schema, with no way to
+// ask for the object form via a struct tag or an inference option.
+//
+// The boolean spelling is the whole reason a llama.cpp-backed model cannot
+// use this server at all: its schema-to-grammar compiler does not implement
+// boolean subschemas and returns HTTP 400 for the request. Because
+// llama.cpp compiles one grammar over the entire tool list, not per tool,
+// `items: true` on this one property was enough to break every tool call,
+// not just call_method's.
+//
+// The fix stays at the items position on purpose. additionalProperties:
+// false on this very schema (CallInput is a struct, so it gets one) is also
+// a boolean subschema, and llama.cpp compiles that one fine. A blanket
+// "rewrite every boolean subschema to an object" pass -- the obvious
+// general fix -- would turn that `false` into `{"not": {}}`, silently
+// swapping "no key outside method/params is accepted" for a schema that
+// rejects nothing at the top level and something unrelated instead. That
+// would be a correctness regression dressed up as a compatibility fix, so
+// the walk below only ever looks at, and only ever rewrites, the value
+// under an "items" key.
+func callMethodInputSchema() map[string]any {
+	schema, err := jsonschema.For[CallInput](nil)
+	if err != nil {
+		// CallInput is a fixed, simple struct; a failure here means the type
+		// itself stopped being schema-representable, which is a programming
+		// error to fix, not a condition to recover from at runtime.
+		panic(fmt.Errorf("inferring call_method's input schema: %w", err))
+	}
+
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		panic(fmt.Errorf("marshalling call_method's input schema: %w", err))
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		panic(fmt.Errorf("decoding call_method's input schema: %w", err))
+	}
+
+	rewriteBooleanItems(doc)
+	return doc
+}
+
+// rewriteBooleanItems walks a decoded schema document and replaces a bare
+// boolean found under an "items" key, at any nesting depth, with its
+// equivalent object-form schema: `true` becomes `{}` and `false` becomes
+// `{"not": {}}`. Every other boolean in the document -- additionalProperties
+// above all -- is left exactly as it was; see callMethodInputSchema for why
+// that distinction matters.
+func rewriteBooleanItems(node any) {
+	switch v := node.(type) {
+	case map[string]any:
+		if b, ok := v["items"].(bool); ok {
+			if b {
+				v["items"] = map[string]any{}
+			} else {
+				v["items"] = map[string]any{"not": map[string]any{}}
+			}
+		}
+		for _, child := range v {
+			rewriteBooleanItems(child)
+		}
+	case []any:
+		for _, child := range v {
+			rewriteBooleanItems(child)
+		}
+	}
 }
 
 // registerDiscovery exposes the long-tail escape hatch.
@@ -165,6 +241,10 @@ func registerDiscovery(srv *mcp.Server, session sessionFor, writesEnabled bool) 
 		// Conservatively destructive: what an arbitrary method does is not
 		// knowable from here, so the caller should be asked.
 		Annotations: writeAnnotations("Call a middleware method directly", true, false),
+		// Overridden rather than left to inference -- see callMethodInputSchema
+		// for why: the inferred schema is correct but renders params' items as
+		// a boolean, which breaks every tool call for a llama.cpp-backed model.
+		InputSchema: callMethodInputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in CallInput) (*mcp.CallToolResult, CallOutput, error) {
 		// Argument-level denials apply here too: the parameters are positional,
 		// so check any object among them.
