@@ -33,7 +33,7 @@ func Storage() *Concern {
 				Name:    "list_datasets",
 				Summary: "datasets with usage; narrow with pool",
 				Method:  "pool.dataset.query",
-				Args:    []string{"pool", "limit"},
+				Args:    []string{"pool"},
 			},
 			{
 				Name:     "show_dataset",
@@ -46,7 +46,7 @@ func Storage() *Concern {
 				Name:    "list_snapshots",
 				Summary: "snapshots; narrow with dataset",
 				Method:  "pool.snapshot.query",
-				Args:    []string{"dataset", "limit"},
+				Args:    []string{"dataset"},
 			},
 		},
 	}
@@ -88,7 +88,6 @@ func System() *Concern {
 				Name:    "audit_log",
 				Summary: "recent audited actions, for seeing what changed on the system",
 				Method:  "audit.query",
-				Args:    []string{"limit"},
 			},
 		},
 	}

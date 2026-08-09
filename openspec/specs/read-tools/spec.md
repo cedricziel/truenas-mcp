@@ -93,3 +93,21 @@ Read operations SHALL return results shaped for the question being asked rather 
 - **WHEN** the target returns a payload containing fields irrelevant to the operation
 - **THEN** the server returns the fields relevant to the operation
 - **AND** the response indicates how to retrieve the complete record
+
+### Requirement: Response-shaping arguments apply uniformly across a concern's operations
+
+An argument that only bounds or reshapes what a response contains, rather than selecting or narrowing the middleware call, SHALL apply the same way to every operation in a concern. Such an argument SHALL NOT be declared per-operation, and SHALL NOT be refused by an operation that does not separately declare it.
+
+This is distinct from an argument that selects or narrows the middleware call itself, such as an identifier or a filter: those remain specific to the operations that accept them, and supplying one to an operation that does not is still refused per the "Type arguments as a flat optional superset" requirement above.
+
+#### Scenario: Result-bounding argument supplied to an operation that never declared it
+
+- **WHEN** a caller supplies the result-bounding argument to an operation that does not list it among its own accepted arguments
+- **THEN** the server applies the bound to the operation's result
+- **AND** the server does not refuse the call for supplying it
+
+#### Scenario: Result-bounding argument supplied to a single-object operation
+
+- **WHEN** a caller supplies the result-bounding argument to an operation whose result is a single object rather than a collection
+- **THEN** the server returns the object unchanged
+- **AND** the server does not refuse the call for supplying it
