@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/cedricziel/truenas-mcp/compare/v0.2.4...v0.3.0) (2026-08-09)
+
+
+### Features
+
+* expose the app catalog as a read-only concern ([#18](https://github.com/cedricziel/truenas-mcp/issues/18)) ([1d5825a](https://github.com/cedricziel/truenas-mcp/commit/1d5825a1473cad426809d661f18a0227e36c54c3))
+* tell clients at initialize that the tool list is partial ([#20](https://github.com/cedricziel/truenas-mcp/issues/20)) ([0271de5](https://github.com/cedricziel/truenas-mcp/commit/0271de5f8f5632659c11992b4dc70b44bcb50839))
+
 ## [0.2.4](https://github.com/cedricziel/truenas-mcp/compare/v0.2.3...v0.2.4) (2026-08-09)
 
 
