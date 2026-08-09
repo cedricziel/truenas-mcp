@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -292,6 +293,38 @@ func TestCatalogCategoriesTakesNoArgument(t *testing.T) {
 // order_by is declared for a different, equally load-bearing reason: without
 // it audit.query returns the OLDEST records first, which is backwards for an
 // op whose whole purpose is "what changed recently".
+// An audit record carries roughly 1,200 characters, most of it a service_data
+// credentials blob repeated on every row. A default page of 50 is therefore
+// about 60KB -- the apps.list failure again, and invisible until now only
+// because this op returned an error instead of a payload. Fixing the call
+// without projecting it would have shipped one bug to expose another.
+func TestAuditLogProjectsAwayTheBulk(t *testing.T) {
+	auditLog := findOp(System(), "audit_log")
+	if auditLog == nil {
+		t.Fatal("system concern must expose an audit_log op")
+	}
+	if len(auditLog.Project) == 0 {
+		t.Fatal("audit_log must declare a projection: a default page of full audit records " +
+			"is ~60KB, and an op a caller cannot afford to call gets called once, expensively")
+	}
+
+	// What the op claims to answer -- when, what, by whom, and whether it
+	// worked -- has to survive the projection, or it reduces the wrong thing.
+	for _, field := range []string{"message_timestamp", "event", "username", "success", "event_data"} {
+		if !slices.Contains(auditLog.Project, field) {
+			t.Errorf("audit_log projection drops %q, which is part of the question it answers: %v",
+				field, auditLog.Project)
+		}
+	}
+
+	// service_data is the bulk and is duplicated from event_data on the
+	// authentication rows. full=true still returns it, which is where a
+	// caller goes to learn which API key acted.
+	if slices.Contains(auditLog.Project, "service_data") {
+		t.Error("audit_log projection keeps service_data, which is the bulk it exists to drop")
+	}
+}
+
 func TestAuditLogDeclaresOrderButNotLimit(t *testing.T) {
 	auditLog := findOp(System(), "audit_log")
 	if auditLog == nil {

@@ -116,6 +116,25 @@ func System() *Concern {
 						"order_by": []string{"-message_timestamp"},
 					},
 				},
+				// An audit record runs to roughly 1,200 characters, most of
+				// it a service_data credentials blob repeated verbatim on
+				// every row and, on authentication rows, duplicated from
+				// event_data. A default page of 50 is therefore about 60KB.
+				// That is the apps.list failure again; it stayed invisible
+				// only because this op returned -32602 rather than a payload,
+				// so fixing the call without projecting it would have traded
+				// one bug for another.
+				//
+				// What survives is the question the summary promises -- when,
+				// what, by whom, from where, and whether it worked.
+				// event_data stays because it carries the method name and the
+				// human-readable description, which is the "what". full=true
+				// returns service_data, which is where a caller goes to learn
+				// which API key acted rather than merely which user.
+				Project: []string{
+					"message_timestamp", "event", "username",
+					"address", "service", "success", "event_data",
+				},
 			},
 		},
 	}
