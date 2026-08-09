@@ -23,7 +23,12 @@ type DispatchInput struct {
 	Pool    string `json:"pool,omitempty" jsonschema:"restrict results to this pool"`
 	Dataset string `json:"dataset,omitempty" jsonschema:"restrict results to this dataset"`
 	Path    string `json:"path,omitempty" jsonschema:"a filesystem path, such as /mnt/tank/media"`
-	Limit   int    `json:"limit,omitempty" jsonschema:"maximum number of results to return"`
+
+	// Limit bounds the response, the same way on every op: shape() applies it
+	// to any list-shaped result regardless of which op produced it, and
+	// middlewareParams never reads it. It is deliberately absent from args()
+	// below for the same reason Full is -- see that field's comment.
+	Limit int `json:"limit,omitempty" jsonschema:"maximum number of results to return"`
 
 	// Full is the escape hatch for ops that declare a default field
 	// projection: it has no effect on ops that do not, and it never widens a
@@ -50,6 +55,16 @@ type DispatchOutput struct {
 // more useful than a complete one that cannot be read.
 const defaultLimit = 50
 
+// args builds the set Concern.Resolve validates an op against. Limit and Full
+// are both deliberately absent: Resolve exists to catch an argument that
+// selects or narrows the wrong thing -- pool on an op with no pool filter --
+// and neither of these does that. Both only ever reach shape(), which applies
+// them uniformly to whatever the op returned, so gating either per-op could
+// only produce a refusal for a response the server was about to shape
+// correctly anyway. That refusal is exactly the defect this comment guards
+// against: limit used to be threaded through here too, which meant an op had
+// to separately declare it in Args to accept it at all, and 40 of 43 ops
+// never did -- despite limit sitting right there on every concern's schema.
 func (in DispatchInput) args() tools.Args {
 	a := tools.Args{}
 	if in.ID != "" {
@@ -66,9 +81,6 @@ func (in DispatchInput) args() tools.Args {
 	}
 	if in.Path != "" {
 		a["path"] = in.Path
-	}
-	if in.Limit != 0 {
-		a["limit"] = in.Limit
 	}
 	return a
 }
@@ -158,7 +170,14 @@ func shape(op string, raw json.RawMessage, limit int, project []string, full boo
 	if err := json.Unmarshal(raw, &list); err != nil {
 		// Not a collection; pass the object through untouched. Projection is
 		// a list-shaped concern -- a single object is already the answer the
-		// caller asked for, not a page of them.
+		// caller asked for, not a page of them. limit is the same kind of
+		// no-op here: since it is no longer gated per-op (see args()), a
+		// caller can pass it to a single-object op such as apps show, and it
+		// is silently inert rather than refused. That is the same trade full
+		// already makes, and it is accepted rather than worked around --
+		// there is no reliable declaration of which ops are list-shaped to
+		// build such a check on, short of hand-maintained data of exactly the
+		// kind this fix removes.
 		var single any
 		if err := json.Unmarshal(raw, &single); err != nil {
 			return DispatchOutput{Op: op, Result: string(raw)}
