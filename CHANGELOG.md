@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/cedricziel/truenas-mcp/compare/v0.2.2...v0.2.3) (2026-08-09)
+
+
+### Bug Fixes
+
+* say that app.update replaces the whole config ([#14](https://github.com/cedricziel/truenas-mcp/issues/14)) ([c99ea50](https://github.com/cedricziel/truenas-mcp/commit/c99ea50ccfaffa0b7d31b58ff5242c8fba00e747))
+
 ## [0.2.2](https://github.com/cedricziel/truenas-mcp/compare/v0.2.1...v0.2.2) (2026-08-09)
 
 
