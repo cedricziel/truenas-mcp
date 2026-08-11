@@ -59,10 +59,13 @@ func collectLogEntries(ctx context.Context, entries <-chan logEntry, options log
 		clock = realLogCollectorClock{}
 	}
 
+	// The quiet interval distinguishes "the backlog is drained" from "the
+	// container is idle" -- a distinction that only makes sense once
+	// streaming has actually begun. Arming it here, before the first entry
+	// arrives, would mistake ordinary subscribe latency (the target hasn't
+	// replayed the backlog yet) for silence and end the collection empty.
+	// The deadline alone bounds the wait for that first entry.
 	var quiet <-chan time.Time
-	if options.QuietInterval > 0 {
-		quiet = clock.After(options.QuietInterval)
-	}
 	var deadline <-chan time.Time
 	if options.Deadline > 0 {
 		deadline = clock.After(options.Deadline)
