@@ -113,7 +113,12 @@ func (f *fakeMiddleware) setDropAfter(n int) {
 	f.dropAfter = n
 }
 
-func (f *fakeMiddleware) emit(method string, params any) error {
+// emit sends an event for the given collection, wrapped the way the real
+// middleware wraps it: every event-source notification arrives as a
+// "collection_update" notification with the actual collection name nested in
+// params.collection and the payload in params.fields, never as a top-level
+// method matching the collection name itself.
+func (f *fakeMiddleware) emit(collection string, fields any) error {
 	f.mu.Lock()
 	conn := f.conn
 	f.mu.Unlock()
@@ -125,8 +130,11 @@ func (f *fakeMiddleware) emit(method string, params any) error {
 	defer f.writeMu.Unlock()
 	return conn.WriteJSON(map[string]any{
 		"jsonrpc": "2.0",
-		"method":  method,
-		"params":  params,
+		"method":  "collection_update",
+		"params": map[string]any{
+			"collection": collection,
+			"fields":     fields,
+		},
 	})
 }
 

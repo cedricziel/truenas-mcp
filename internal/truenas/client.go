@@ -111,6 +111,12 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 	return c, nil
 }
 
+// collectionUpdateMethod is the fixed top-level method every event-source
+// notification arrives as. The subscribed collection name -- including any
+// argument suffix, e.g. `app.container_log_follow:{"app_name":...}` -- is
+// never the top-level method; it is nested in params.collection.
+const collectionUpdateMethod = "collection_update"
+
 // readLoop dispatches responses to whichever caller is waiting on their ID.
 // Matching by ID rather than by arrival order is what makes concurrent calls
 // on one connection safe.
@@ -121,9 +127,24 @@ func (c *Client) readLoop() {
 			c.failPending(err)
 			return
 		}
-		// Server-initiated notifications carry no ID and no waiter.
+		// Server-initiated notifications carry no ID and no waiter. Every
+		// event-source notification is wrapped in a fixed "collection_update"
+		// envelope; unwrap it to route by the actual collection name rather
+		// than by the literal string "collection_update", which every
+		// notification shares and which matches no real subscription.
+		if resp.ID == 0 && resp.Method == collectionUpdateMethod {
+			var envelope struct {
+				Collection string          `json:"collection"`
+				Fields     json.RawMessage `json:"fields"`
+			}
+			if json.Unmarshal(resp.Params, &envelope) == nil && envelope.Collection != "" {
+				c.dispatchNotification(envelope.Collection, envelope.Fields)
+			}
+			continue
+		}
 		if resp.ID == 0 && resp.Method != "" {
-			c.dispatchNotification(resp.Method, resp.Params)
+			// A server-initiated message under some other method: not a
+			// subscription this client knows how to route.
 			continue
 		}
 
