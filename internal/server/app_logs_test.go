@@ -65,8 +65,14 @@ func newLogTarget(t *testing.T) *logTarget {
 				continue
 			}
 			for _, event := range target.eventsFor(source) {
+				// Every event-source notification arrives wrapped in a fixed
+				// "collection_update" envelope: the top-level method is
+				// never the collection name itself, which instead lives in
+				// params.collection, alongside the payload in params.fields.
 				if err := conn.WriteJSON(map[string]any{
-					"jsonrpc": "2.0", "method": source, "params": event,
+					"jsonrpc": "2.0",
+					"method":  "collection_update",
+					"params":  map[string]any{"collection": source, "fields": event},
 				}); err != nil {
 					return
 				}
