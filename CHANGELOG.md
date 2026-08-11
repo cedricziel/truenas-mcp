@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/cedricziel/truenas-mcp/compare/v0.4.0...v0.4.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* fix log collection ([#26](https://github.com/cedricziel/truenas-mcp/issues/26)) ([87004b6](https://github.com/cedricziel/truenas-mcp/commit/87004b6689bb1a4365832e6e8aca34971945b98a))
+
 ## [0.4.0](https://github.com/cedricziel/truenas-mcp/compare/v0.3.1...v0.4.0) (2026-08-09)
 
 
