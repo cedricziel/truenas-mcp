@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/cedricziel/truenas-mcp/compare/v0.4.1...v0.4.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* **truenas:** route event notifications by their collection, not method ([#28](https://github.com/cedricziel/truenas-mcp/issues/28)) ([8f195a2](https://github.com/cedricziel/truenas-mcp/commit/8f195a23a38dc1413fbb7eb309ad0ed9bda68217))
+
 ## [0.4.1](https://github.com/cedricziel/truenas-mcp/compare/v0.4.0...v0.4.1) (2026-08-11)
 
 
