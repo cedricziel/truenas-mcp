@@ -160,11 +160,21 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
+
+	// Mounted before the MCP handler is built: MountOAuth returns the key
+	// and discovery URL that handler needs to accept the tokens this
+	// authorization server issues and to point its own 401 challenge back
+	// at the right place. It is a no-op when OAuth is not configured.
+	oauthKeys, resourceMetadataURL := server.MountOAuth(
+		mux, sessions, cfg.OAuthIssuer, cfg.OAuthKey(), cfg.OAuthAccessTokenTTL, cfg.OAuthRefreshTokenTTL)
+
 	mux.Handle("/mcp", server.NewMCPHandler(server.MCPConfig{
-		Version:      version,
-		Target:       cfg.Target,
-		EnableWrites: cfg.EnableWrites,
-		Sessions:     sessions,
+		Version:                      version,
+		Target:                       cfg.Target,
+		EnableWrites:                 cfg.EnableWrites,
+		Sessions:                     sessions,
+		OAuthKeys:                    oauthKeys,
+		ProtectedResourceMetadataURL: resourceMetadataURL,
 	}))
 
 	srv := &http.Server{

@@ -16,6 +16,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/cedricziel/truenas-mcp/internal/oauth"
 )
 
 const (
@@ -25,6 +28,11 @@ const (
 	// APIPath is the middleware's versioned JSON-RPC endpoint. "current"
 	// resolves to whatever version the target runs.
 	APIPath = "/api/current"
+
+	// DefaultOAuthAccessTokenTTL and DefaultOAuthRefreshTokenTTL are used
+	// when the operator does not configure a TTL explicitly.
+	DefaultOAuthAccessTokenTTL  = time.Hour
+	DefaultOAuthRefreshTokenTTL = 30 * 24 * time.Hour
 )
 
 // Mode selects which transport the server serves on. Validation differs by
@@ -77,6 +85,31 @@ type Config struct {
 	// included in Summary.
 	APIKey string
 
+	// OAuthIssuer is the externally-reachable base URL clients see as this
+	// server's OAuth issuer. Its presence is what turns the OAuth
+	// authorization server on -- see OAuthEnabled -- the same way
+	// TLSCertFile/TLSKeyFile's presence, not a separate flag, turns on TLS.
+	OAuthIssuer string
+
+	// OAuthEncryptionKey seals every OAuth client registration, authorization
+	// code, access token, and refresh token this process issues. Left unset,
+	// a random key is generated for the process instead -- see
+	// oauthKeyGenerated -- which works, but invalidates every outstanding
+	// OAuth value on the next restart.
+	OAuthEncryptionKey string
+
+	// OAuthAccessTokenTTL and OAuthRefreshTokenTTL bound how long an issued
+	// OAuth token is valid. A zero OAuthRefreshTokenTTL disables refresh
+	// token issuance entirely.
+	OAuthAccessTokenTTL  time.Duration
+	OAuthRefreshTokenTTL time.Duration
+
+	// oauthKey is the resolved 32-byte key backing every value the oauth
+	// package seals, decoded from OAuthEncryptionKey or generated fresh when
+	// that was unset. Only set when OAuthEnabled and mode is ModeHTTP.
+	oauthKey          [32]byte
+	oauthKeyGenerated bool
+
 	mode Mode
 
 	// listenSet records whether TRUENAS_MCP_LISTEN was explicitly set, before
@@ -93,6 +126,15 @@ type Config struct {
 func Load(getenv func(string) string, mode Mode) (*Config, error) {
 	listen := strings.TrimSpace(getenv("TRUENAS_MCP_LISTEN"))
 
+	accessTTL, err := durationVar(getenv, "TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL", DefaultOAuthAccessTokenTTL)
+	if err != nil {
+		return nil, err
+	}
+	refreshTTL, err := durationVar(getenv, "TRUENAS_MCP_OAUTH_REFRESH_TOKEN_TTL", DefaultOAuthRefreshTokenTTL)
+	if err != nil {
+		return nil, err
+	}
+
 	c := &Config{
 		Target:                   strings.TrimSpace(getenv("TRUENAS_MCP_TARGET")),
 		Listen:                   listen,
@@ -104,6 +146,10 @@ func Load(getenv func(string) string, mode Mode) (*Config, error) {
 		TargetAllowPlaintext:     boolVar(getenv, "TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT"),
 		EnableWrites:             boolVar(getenv, "TRUENAS_MCP_ENABLE_WRITES"),
 		APIKey:                   strings.TrimSpace(getenv("TRUENAS_MCP_API_KEY")),
+		OAuthIssuer:              strings.TrimSpace(getenv("TRUENAS_MCP_OAUTH_ISSUER")),
+		OAuthEncryptionKey:       strings.TrimSpace(getenv("TRUENAS_MCP_OAUTH_ENCRYPTION_KEY")),
+		OAuthAccessTokenTTL:      accessTTL,
+		OAuthRefreshTokenTTL:     refreshTTL,
 		mode:                     mode,
 	}
 
@@ -115,8 +161,35 @@ func Load(getenv func(string) string, mode Mode) (*Config, error) {
 		return nil, err
 	}
 
+	// Resolved once per process, not per validation: a fresh key must not be
+	// generated more than once, or every value sealed under the first one
+	// would stop verifying against the second.
+	if c.mode == ModeHTTP && c.OAuthEnabled() {
+		key, generated, err := oauth.ResolveMasterKey(c.OAuthEncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("TRUENAS_MCP_OAUTH_ENCRYPTION_KEY is invalid: %w", err)
+		}
+		c.oauthKey = key
+		c.oauthKeyGenerated = generated
+	}
+
 	c.collectWarnings()
 	return c, nil
+}
+
+// OAuthEnabled reports whether the OAuth authorization server is configured.
+// The issuer URL's presence, not a separate flag, is the switch -- see
+// OAuthIssuer -- but it only ever means anything on the HTTP transport:
+// stdio mode never opens the listener OAuth's endpoints would be served on.
+func (c *Config) OAuthEnabled() bool {
+	return c.mode == ModeHTTP && c.OAuthIssuer != ""
+}
+
+// OAuthKey is the resolved 32-byte key backing every OAuth client
+// registration, authorization code, access token, and refresh token this
+// process issues. Only meaningful when OAuthEnabled and mode is ModeHTTP.
+func (c *Config) OAuthKey() [32]byte {
+	return c.oauthKey
 }
 
 func (c *Config) validate() error {
@@ -156,12 +229,36 @@ func (c *Config) validate() error {
 		return fmt.Errorf("TRUENAS_MCP_TLS_CERT and TRUENAS_MCP_TLS_KEY must be set together")
 	}
 
+	// The authorization endpoint collects a TrueNAS API key through a
+	// browser form on this same boundary, so OAuth refuses the plaintext
+	// override outright -- unlike the raw-bearer-key path below, there is no
+	// case where an operator already holds the secret and is choosing to
+	// transmit it insecurely.
+	if c.OAuthEnabled() && c.AllowPlaintext {
+		return fmt.Errorf(
+			"refusing to enable OAuth with TRUENAS_MCP_ALLOW_PLAINTEXT set: TLS is required whenever " +
+				"TRUENAS_MCP_OAUTH_ISSUER is configured, since the authorization endpoint collects a " +
+				"TrueNAS API key through a browser form on this same connection")
+	}
+
 	// Caller credentials travel on the MCP boundary, so refuse to serve them
 	// in the clear unless the operator says so explicitly.
 	if !c.TLSEnabled() && !c.AllowPlaintext {
 		return fmt.Errorf(
 			"refusing to serve MCP without TLS: caller API keys are transmitted on this connection. " +
 				"Set TRUENAS_MCP_TLS_CERT and TRUENAS_MCP_TLS_KEY, or set TRUENAS_MCP_ALLOW_PLAINTEXT=true to override")
+	}
+
+	if c.OAuthEnabled() {
+		if _, err := url.ParseRequestURI(c.OAuthIssuer); err != nil ||
+			!strings.HasPrefix(c.OAuthIssuer, "https://") && !strings.HasPrefix(c.OAuthIssuer, "http://") {
+			return fmt.Errorf("TRUENAS_MCP_OAUTH_ISSUER is not a valid absolute URL: got %q", c.OAuthIssuer)
+		}
+		if c.OAuthEncryptionKey != "" {
+			if _, err := oauth.ParseMasterKey(c.OAuthEncryptionKey); err != nil {
+				return fmt.Errorf("TRUENAS_MCP_OAUTH_ENCRYPTION_KEY is invalid: %w", err)
+			}
+		}
 	}
 
 	if _, _, err := net.SplitHostPort(c.Listen); err != nil {
@@ -210,6 +307,9 @@ func (c *Config) collectWarnings() {
 		if c.AllowPlaintext {
 			c.warnings = append(c.warnings, "TRUENAS_MCP_ALLOW_PLAINTEXT is set but has no effect in stdio mode")
 		}
+		if c.OAuthIssuer != "" {
+			c.warnings = append(c.warnings, "TRUENAS_MCP_OAUTH_ISSUER is set but has no effect in stdio mode")
+		}
 	} else if !c.TLSEnabled() {
 		c.warnings = append(c.warnings,
 			"serving MCP over plaintext: caller API keys are transmitted in the clear and TrueNAS may revoke them")
@@ -225,6 +325,13 @@ func (c *Config) collectWarnings() {
 	if c.EnableWrites {
 		c.warnings = append(c.warnings,
 			"write tier is enabled: mutating tools are exposed")
+	}
+	if c.mode == ModeHTTP && c.OAuthEnabled() && c.oauthKeyGenerated {
+		c.warnings = append(c.warnings,
+			"TRUENAS_MCP_OAUTH_ENCRYPTION_KEY is not set: a random key was generated for this process. "+
+				"Restarting invalidates every outstanding OAuth client registration, authorization code, and "+
+				"token (the TrueNAS credentials they wrap are unaffected). Set TRUENAS_MCP_OAUTH_ENCRYPTION_KEY "+
+				"to keep OAuth sessions stable across restarts.")
 	}
 }
 
@@ -263,11 +370,34 @@ func (c *Config) Summary() string {
 	if c.TLSEnabled() {
 		tls = "on"
 	}
-	return fmt.Sprintf("target=%s listen=%s transport=http tls=%s writes=%s",
-		c.Target, c.Listen, tls, writes)
+	oauthStatus := "disabled"
+	if c.OAuthEnabled() {
+		oauthStatus = "enabled"
+	}
+	return fmt.Sprintf("target=%s listen=%s transport=http tls=%s writes=%s oauth=%s",
+		c.Target, c.Listen, tls, writes, oauthStatus)
 }
 
 func boolVar(getenv func(string) string, key string) bool {
 	v, err := strconv.ParseBool(strings.TrimSpace(getenv(key)))
 	return err == nil && v
+}
+
+// durationVar parses key as a Go duration, returning def when unset. An
+// empty override behaves like an unset variable rather than an error, so a
+// deployment tool that always sets every variable can pass "" for "use the
+// default" without this failing to load.
+func durationVar(getenv func(string) string, key string, def time.Duration) (time.Duration, error) {
+	v := strings.TrimSpace(getenv(key))
+	if v == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("%s is not a valid duration: %w", key, err)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("%s must not be negative", key)
+	}
+	return d, nil
 }

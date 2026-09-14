@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/cedricziel/truenas-mcp/internal/oauth"
 	"github.com/cedricziel/truenas-mcp/internal/truenas"
 )
 
@@ -16,28 +18,53 @@ import (
 var ErrNoCredential = errors.New(
 	"no TrueNAS API key supplied: send it as `Authorization: Bearer <key>` or `X-TrueNAS-API-Key: <key>`")
 
+// ErrInvalidCredential means the caller supplied an OAuth access token this
+// server issued at some point, but it is expired, tampered with, or sealed
+// under a key this process no longer holds (for example, one generated for
+// a since-restarted process -- see oauth.ResolveMasterKey).
+var ErrInvalidCredential = errors.New("the supplied OAuth access token is invalid or expired")
+
 // APIKeyHeader is accepted for clients that cannot set an Authorization header.
 const APIKeyHeader = "X-TrueNAS-API-Key"
 
 // CredentialFromRequest extracts the caller's TrueNAS API key.
 //
+// A bearer value is accepted either as a raw TrueNAS API key or, when
+// oauthKeys is non-nil (OAuth is enabled), as an OAuth access token this
+// server issued -- see oauth.IsAccessToken -- which is unsealed to the
+// TrueNAS API key it was bound to at authorization time. Either way the
+// caller gets back a TrueNAS API key and never has to know which form the
+// client actually sent; everything downstream (SessionManager, and every
+// tool call it authorizes) is unchanged.
+//
 // Errors never include the header value: a misconfigured client puts its key
 // in the wrong place, and an error that echoes it would move the secret into
 // logs.
-func CredentialFromRequest(r *http.Request) (string, error) {
+func CredentialFromRequest(r *http.Request, oauthKeys *oauth.Keys) (string, error) {
 	if v := strings.TrimSpace(r.Header.Get(APIKeyHeader)); v != "" {
 		return v, nil
 	}
 
 	auth := r.Header.Get("Authorization")
-	if scheme, value, found := strings.Cut(auth, " "); found &&
-		strings.EqualFold(strings.TrimSpace(scheme), "bearer") {
-		if key := strings.TrimSpace(value); key != "" {
-			return key, nil
-		}
+	scheme, value, found := strings.Cut(auth, " ")
+	if !found || !strings.EqualFold(strings.TrimSpace(scheme), "bearer") {
+		return "", ErrNoCredential
 	}
 
-	return "", ErrNoCredential
+	token := strings.TrimSpace(value)
+	if token == "" {
+		return "", ErrNoCredential
+	}
+
+	if oauthKeys != nil && oauth.IsAccessToken(token) {
+		payload, err := oauth.DecodeAccessToken(*oauthKeys, token, time.Now())
+		if err != nil {
+			return "", ErrInvalidCredential
+		}
+		return payload.Credential.APIKey, nil
+	}
+
+	return token, nil
 }
 
 // Session is one caller's authenticated connection to the middleware.
