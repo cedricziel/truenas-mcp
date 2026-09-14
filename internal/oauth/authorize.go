@@ -11,6 +11,7 @@ import (
 // to render the consent form and, on submission, to seal an authorization
 // code.
 type authorizeRequest struct {
+	ResponseType        string
 	ClientID            string
 	RedirectURI         string
 	State               string
@@ -27,6 +28,7 @@ type authorizeRequest struct {
 // untrusted as a GET's query parameters.
 func (h *Handler) parseAuthorizeRequest(values url.Values) (authorizeRequest, string) {
 	req := authorizeRequest{
+		ResponseType:        values.Get("response_type"),
 		ClientID:            values.Get("client_id"),
 		RedirectURI:         values.Get("redirect_uri"),
 		State:               values.Get("state"),
@@ -34,8 +36,8 @@ func (h *Handler) parseAuthorizeRequest(values url.Values) (authorizeRequest, st
 		CodeChallengeMethod: values.Get("code_challenge_method"),
 	}
 
-	if rt := values.Get("response_type"); rt != "" && rt != "code" {
-		return req, `response_type must be "code"`
+	if req.ResponseType != "code" {
+		return req, `response_type is required and must be "code"`
 	}
 	if req.ClientID == "" {
 		return req, "client_id is required"

@@ -33,6 +33,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Request) {
+	clientID := r.PostFormValue("client_id")
 	code := r.PostFormValue("code")
 	verifier := r.PostFormValue("code_verifier")
 	redirectURI := r.PostFormValue("redirect_uri")
@@ -40,9 +41,12 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 	// redirect_uri is mandatory at the authorization endpoint that produced
 	// any code this server issues (see parseAuthorizeRequest), so per RFC
 	// 6749 §4.1.3 / OAuth 2.1 §4.1.3 it is required here too and always
-	// checked -- never skipped just because a client omitted it.
-	if code == "" || verifier == "" || redirectURI == "" {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "code, code_verifier, and redirect_uri are required")
+	// checked -- never skipped just because a client omitted it. client_id
+	// is required for the same reason every registered client here is
+	// public (no client_secret, token_endpoint_auth_method "none") -- RFC
+	// 6749 §3.2.1 requires it on this grant for exactly that client type.
+	if code == "" || verifier == "" || redirectURI == "" || clientID == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "client_id, code, code_verifier, and redirect_uri are required")
 		return
 	}
 
@@ -50,6 +54,11 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 	payload, err := DecodeCode(h.cfg.Keys, code, now)
 	if err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid or expired")
+		return
+	}
+
+	if subtle.ConstantTimeCompare([]byte(clientID), []byte(payload.ClientID)) != 1 {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code was not issued to this client")
 		return
 	}
 

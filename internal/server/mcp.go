@@ -320,7 +320,12 @@ func (v SessionCredentialValidator) Validate(ctx context.Context, apiKey string)
 	if err != nil {
 		return err
 	}
-	return sess.Close()
+	// Login and the version check inside Open already succeeded, so the
+	// credential is valid regardless of what happens next -- a failure
+	// closing this probe connection (already-severed socket, say) must not
+	// be reported as a rejected credential.
+	_ = sess.Close()
+	return nil
 }
 
 // MountOAuth builds the OAuth authorization server and registers its routes

@@ -1,7 +1,8 @@
 package oauth
 
 import (
-	"strings"
+	"bytes"
+	"encoding/base64"
 	"testing"
 )
 
@@ -102,7 +103,18 @@ func TestCiphertextDoesNotContainPlaintext(t *testing.T) {
 		t.Fatalf("seal: %v", err)
 	}
 
-	if strings.Contains(token, secret) {
-		t.Fatalf("sealed token leaks the plaintext secret: %s", token)
+	// Check the decoded bytes, not the base64 string: base64 regroups the
+	// payload into 4-character blocks on 3-byte boundaries, so a plaintext
+	// substring's presence or absence in the *encoded* string is mostly an
+	// accident of alignment either way and wouldn't reliably catch a
+	// regression to "marshal and base64-encode with no actual encryption".
+	// The decoded bytes are what a broken seal would expose as literal
+	// plaintext JSON.
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		t.Fatalf("decoding sealed token: %v", err)
+	}
+	if bytes.Contains(raw, []byte(secret)) {
+		t.Fatal("sealed token leaks the plaintext secret")
 	}
 }

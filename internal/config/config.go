@@ -130,6 +130,12 @@ func Load(getenv func(string) string, mode Mode) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Unlike OAuthRefreshTokenTTL, zero has no meaning here -- there is no
+	// "issue access tokens that don't work" mode -- so it is rejected here
+	// rather than accepted and left to silently mint unusable tokens.
+	if accessTTL == 0 {
+		return nil, fmt.Errorf("TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL must be greater than zero")
+	}
 	refreshTTL, err := durationVar(getenv, "TRUENAS_MCP_OAUTH_REFRESH_TOKEN_TTL", DefaultOAuthRefreshTokenTTL)
 	if err != nil {
 		return nil, err
@@ -250,9 +256,18 @@ func (c *Config) validate() error {
 	}
 
 	if c.OAuthEnabled() {
-		if _, err := url.ParseRequestURI(c.OAuthIssuer); err != nil ||
-			!strings.HasPrefix(c.OAuthIssuer, "https://") && !strings.HasPrefix(c.OAuthIssuer, "http://") {
-			return fmt.Errorf("TRUENAS_MCP_OAUTH_ISSUER is not a valid absolute URL: got %q", c.OAuthIssuer)
+		// The issuer is what discovery metadata advertises as the
+		// authorization/token endpoints' base URL to every OAuth client, so
+		// it must itself promise TLS -- independent of, and in addition to,
+		// TLSEnabled()/AllowPlaintext above, which only govern what this
+		// process actually listens on. A reverse proxy in front of this
+		// process could terminate TLS and forward over plaintext, in which
+		// case the issuer clients are told about is still the outward-facing
+		// https URL; nothing legitimate needs this to be http.
+		issuerURL, err := url.ParseRequestURI(c.OAuthIssuer)
+		if err != nil || !strings.EqualFold(issuerURL.Scheme, "https") || issuerURL.Host == "" {
+			return fmt.Errorf(
+				"TRUENAS_MCP_OAUTH_ISSUER is not a valid https URL: got %q", c.OAuthIssuer)
 		}
 		if c.OAuthEncryptionKey != "" {
 			if _, err := oauth.ParseMasterKey(c.OAuthEncryptionKey); err != nil {

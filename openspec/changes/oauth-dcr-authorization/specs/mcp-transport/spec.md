@@ -2,11 +2,11 @@
 
 ### Requirement: Authenticate each session with a caller-supplied TrueNAS credential
 
-Each client SHALL supply a TrueNAS username and API key when establishing a session, either directly as a raw API key or indirectly as an OAuth access token issued by the `oauth-authorization` capability and bound to such a credential. The server SHALL NOT hold a TrueNAS credential of its own and SHALL NOT fall back to one.
+Each client SHALL supply the TrueNAS API key it will run under when establishing a session, either directly as a raw API key or indirectly as an OAuth access token issued by the `oauth-authorization` capability and bound to such a key. (That capability's own authorization step is what collects a TrueNAS username and API key from the resource owner -- the username only for display back to them, never required by the target itself.) The server SHALL NOT hold a TrueNAS credential of its own and SHALL NOT fall back to one.
 
 #### Scenario: Valid caller credential
 
-- **WHEN** a client establishes a session with a username and API key the target accepts
+- **WHEN** a client establishes a session with an API key the target accepts
 - **THEN** the session is established
 - **AND** the server opens a middleware session under that identity
 

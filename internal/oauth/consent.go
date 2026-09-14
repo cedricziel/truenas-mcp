@@ -32,6 +32,7 @@ button { margin-top: 1.5rem; padding: 0.6rem 1.2rem; font-size: 1rem; }
 <p class="client">Only continue if you recognize this application and destination. Anyone can register a client with any name -- the destination above is the only thing this page can verify.</p>
 {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 <form method="post" action="{{.Action}}">
+<input type="hidden" name="response_type" value="{{.ResponseType}}">
 <input type="hidden" name="client_id" value="{{.ClientID}}">
 <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
 <input type="hidden" name="state" value="{{.State}}">
@@ -49,6 +50,7 @@ button { margin-top: 1.5rem; padding: 0.6rem 1.2rem; font-size: 1rem; }
 
 type consentView struct {
 	Action              string
+	ResponseType        string
 	ClientID            string
 	ClientName          string
 	RedirectURI         string
@@ -68,6 +70,7 @@ func renderConsentForm(w http.ResponseWriter, req authorizeRequest, username, er
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = consentTemplate.Execute(w, consentView{
 		Action:              AuthorizePath,
+		ResponseType:        req.ResponseType,
 		ClientID:            req.ClientID,
 		ClientName:          name,
 		RedirectURI:         req.RedirectURI,

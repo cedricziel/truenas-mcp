@@ -293,8 +293,31 @@ func TestAuthorizeGetRejectsUnregisteredRedirectURI(t *testing.T) {
 	_, challenge := pkcePair()
 
 	q := url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {"https://evil.example/callback"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, AuthorizePath+"?"+q.Encode(), nil))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+}
+
+// response_type is REQUIRED by RFC 6749 §4.1.1, not merely defaulted to
+// "code" when absent: an authorization request that omits it is malformed,
+// not implicitly an authorization-code request.
+func TestAuthorizeGetRejectsMissingResponseType(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{}, time.Hour)
+	clientID := registerClient(t, mux, testRedirectURI)
+	_, challenge := pkcePair()
+
+	q := url.Values{
+		"client_id":             {clientID},
+		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 	}
@@ -311,8 +334,9 @@ func TestAuthorizeGetRejectsMissingPKCE(t *testing.T) {
 	clientID := registerClient(t, mux, testRedirectURI)
 
 	q := url.Values{
-		"client_id":    {clientID},
-		"redirect_uri": {testRedirectURI},
+		"response_type": {"code"},
+		"client_id":     {clientID},
+		"redirect_uri":  {testRedirectURI},
 	}
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, AuthorizePath+"?"+q.Encode(), nil))
@@ -337,6 +361,7 @@ func TestAuthorizePostAcceptsValidCredential(t *testing.T) {
 	_, challenge := pkcePair()
 
 	rec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
@@ -367,6 +392,7 @@ func TestAuthorizePostRejectsInvalidCredentialWithoutRedirecting(t *testing.T) {
 	_, challenge := pkcePair()
 
 	rec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
@@ -388,6 +414,7 @@ func authorizeAndExchange(t *testing.T, mux *http.ServeMux, apiKey, verifier, ch
 	t.Helper()
 
 	authRec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
@@ -405,6 +432,7 @@ func authorizeAndExchange(t *testing.T, mux *http.ServeMux, apiKey, verifier, ch
 
 	tokenRec := doTokenPost(t, mux, url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
 		"code":          {code},
 		"code_verifier": {verifier},
 		"redirect_uri":  {testRedirectURI},
@@ -468,6 +496,7 @@ func TestTokenExchangeRequiresRedirectURI(t *testing.T) {
 	verifier, challenge := pkcePair()
 
 	authRec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
@@ -479,6 +508,7 @@ func TestTokenExchangeRequiresRedirectURI(t *testing.T) {
 
 	rec := doTokenPost(t, mux, url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
 		"code":          {code},
 		"code_verifier": {verifier},
 	})
@@ -494,12 +524,18 @@ func TestTokenExchangeRequiresRedirectURI(t *testing.T) {
 	}
 }
 
-func TestTokenExchangeRejectsMismatchedRedirectURI(t *testing.T) {
+// Every client registered through Dynamic Client Registration is public
+// (no client_secret, token_endpoint_auth_method "none"), and RFC 6749
+// §3.2.1 requires client_id on this grant for exactly that client type --
+// so it must be required and checked here, not merely implied by the code
+// having been issued to some client.
+func TestTokenExchangeRequiresClientID(t *testing.T) {
 	_, mux := newTestMux(t, fakeValidator{acceptedKey: "1-goodkey"}, time.Hour)
 	clientID := registerClient(t, mux, testRedirectURI)
 	verifier, challenge := pkcePair()
 
 	authRec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
@@ -511,6 +547,74 @@ func TestTokenExchangeRejectsMismatchedRedirectURI(t *testing.T) {
 
 	rec := doTokenPost(t, mux, url.Values{
 		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"redirect_uri":  {testRedirectURI},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+}
+
+func TestTokenExchangeRejectsMismatchedClientID(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{acceptedKey: "1-goodkey"}, time.Hour)
+	clientID := registerClient(t, mux, testRedirectURI)
+	// A distinct redirect URI, not just a second registration call, so the
+	// signed client_id actually differs: EncodeClientID is deterministic,
+	// and two registrations with identical metadata (including the same
+	// CreatedAt second) would otherwise collide on the same client_id.
+	otherClientID := registerClient(t, mux, "https://claude.ai/api/mcp/callback/other")
+	verifier, challenge := pkcePair()
+
+	authRec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
+		"client_id":             {clientID},
+		"redirect_uri":          {testRedirectURI},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		"api_key":               {"1-goodkey"},
+	})
+	loc, _ := url.Parse(authRec.Header().Get("Location"))
+	code := loc.Query().Get("code")
+
+	rec := doTokenPost(t, mux, url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {otherClientID},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"redirect_uri":  {testRedirectURI},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+	var body oauthError
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if body.Error != "invalid_grant" {
+		t.Errorf("error = %q, want invalid_grant", body.Error)
+	}
+}
+
+func TestTokenExchangeRejectsMismatchedRedirectURI(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{acceptedKey: "1-goodkey"}, time.Hour)
+	clientID := registerClient(t, mux, testRedirectURI)
+	verifier, challenge := pkcePair()
+
+	authRec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
+		"client_id":             {clientID},
+		"redirect_uri":          {testRedirectURI},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		"api_key":               {"1-goodkey"},
+	})
+	loc, _ := url.Parse(authRec.Header().Get("Location"))
+	code := loc.Query().Get("code")
+
+	rec := doTokenPost(t, mux, url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
 		"code":          {code},
 		"code_verifier": {verifier},
 		"redirect_uri":  {"https://claude.ai/some/other/path"},
@@ -533,6 +637,7 @@ func TestTokenExchangeRejectsMismatchedVerifier(t *testing.T) {
 	_, challenge := pkcePair()
 
 	authRec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
@@ -544,6 +649,7 @@ func TestTokenExchangeRejectsMismatchedVerifier(t *testing.T) {
 
 	rec := doTokenPost(t, mux, url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
 		"code":          {code},
 		"code_verifier": {"the-wrong-verifier"},
 		"redirect_uri":  {testRedirectURI},
@@ -559,6 +665,7 @@ func TestTokenExchangeRejectsReplayedCode(t *testing.T) {
 	verifier, challenge := pkcePair()
 
 	authRec := doAuthorizePost(t, mux, url.Values{
+		"response_type":         {"code"},
 		"client_id":             {clientID},
 		"redirect_uri":          {testRedirectURI},
 		"code_challenge":        {challenge},
@@ -570,6 +677,7 @@ func TestTokenExchangeRejectsReplayedCode(t *testing.T) {
 
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
 		"code":          {code},
 		"code_verifier": {verifier},
 		"redirect_uri":  {testRedirectURI},
@@ -609,6 +717,7 @@ func TestTokenExchangeRejectsExpiredCode(t *testing.T) {
 
 	rec := doTokenPost(t, mux, url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {"whatever"},
 		"code":          {expired},
 		"code_verifier": {"anything"},
 		"redirect_uri":  {testRedirectURI},

@@ -168,11 +168,20 @@ A request bearing a valid OAuth access token SHALL be authenticated as the TrueN
 
 Registered clients, authorization codes, access tokens, and refresh tokens SHALL be representable entirely as values the server can verify using an in-memory key, without writing any of them to a mounted file, dataset, or external store.
 
-#### Scenario: Server restarts
+Whether a restart invalidates them depends entirely on whether that key is stable across the restart: a configured key that does not change preserves them, and their absence or change does not, by design -- the server has nothing to compare an incoming key against except itself, so it cannot detect or warn about the "operator configured a *different* key" case the way it can the "no key was configured at all" case below.
 
-- **WHEN** the server process restarts
+#### Scenario: Server restarts with a stable configured key
+
+- **WHEN** the server process restarts with the same operator-configured encryption key it had before
 - **THEN** no file or dataset written by the previous process is required for the server to start
-- **AND** the operator is warned at startup if restarting invalidated previously issued registrations and tokens
+- **AND** previously issued client registrations, authorization codes, and unexpired tokens remain valid
+
+#### Scenario: Server restarts without a configured key
+
+- **WHEN** the server process restarts without an encryption key configured
+- **THEN** a fresh key is generated for the new process
+- **AND** every previously issued client registration, authorization code, and token becomes unverifiable
+- **AND** the operator is warned at startup that this happened
 
 ### Requirement: Refuse plaintext once OAuth is enabled
 

@@ -104,6 +104,7 @@ func TestOAuthEndToEndAuthenticatesMCPRequest(t *testing.T) {
 	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
 
 	form := url.Values{
+		"response_type":         {"code"},
 		"client_id":             {reg.ClientID},
 		"redirect_uri":          {redirectURI},
 		"code_challenge":        {challenge},
@@ -129,6 +130,7 @@ func TestOAuthEndToEndAuthenticatesMCPRequest(t *testing.T) {
 	// 3. Token exchange.
 	tokenForm := url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {reg.ClientID},
 		"code":          {code},
 		"code_verifier": {verifier},
 		"redirect_uri":  {redirectURI},
