@@ -37,8 +37,12 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 	verifier := r.PostFormValue("code_verifier")
 	redirectURI := r.PostFormValue("redirect_uri")
 
-	if code == "" || verifier == "" {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "code and code_verifier are required")
+	// redirect_uri is mandatory at the authorization endpoint that produced
+	// any code this server issues (see parseAuthorizeRequest), so per RFC
+	// 6749 §4.1.3 / OAuth 2.1 §4.1.3 it is required here too and always
+	// checked -- never skipped just because a client omitted it.
+	if code == "" || verifier == "" || redirectURI == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "code, code_verifier, and redirect_uri are required")
 		return
 	}
 
@@ -49,7 +53,7 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if redirectURI != "" && redirectURI != payload.RedirectURI {
+	if redirectURI != payload.RedirectURI {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the authorization request")
 		return
 	}

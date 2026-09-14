@@ -167,6 +167,65 @@ func TestRegisterRejectsMalformedRedirectURI(t *testing.T) {
 	}
 }
 
+// A redirect_uri is where this server delivers an authorization code once
+// consent is granted, and is shown back to the resource owner as the thing
+// to verify -- so registration must reject anything but https (or http
+// restricted to loopback, for a native/CLI client's local callback), not
+// javascript:, data:, or an arbitrary custom scheme.
+func TestRegisterRejectsNonHTTPSRedirectURIScheme(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{}, time.Hour)
+
+	for _, redirectURI := range []string{
+		"javascript:alert(1)",
+		"data:text/html,<script>alert(1)</script>",
+		"http://attacker.example/callback",
+		"custom-scheme://callback",
+	} {
+		t.Run(redirectURI, func(t *testing.T) {
+			body := strings.NewReader(`{"redirect_uris":["` + redirectURI + `"]}`)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, RegisterPath, body))
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestRegisterAllowsHTTPLoopbackRedirectURI(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{}, time.Hour)
+
+	for _, redirectURI := range []string{
+		"http://127.0.0.1:51234/callback",
+		"http://localhost:51234/callback",
+		"http://[::1]:51234/callback",
+	} {
+		t.Run(redirectURI, func(t *testing.T) {
+			body := strings.NewReader(`{"redirect_uris":["` + redirectURI + `"]}`)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, RegisterPath, body))
+
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("status = %d, want 201: %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestRegisterRejectsOversizedBody(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{}, time.Hour)
+
+	huge := strings.Repeat("a", maxRegisterBodyBytes+1)
+	body := strings.NewReader(`{"redirect_uris":["https://claude.ai/callback"],"client_name":"` + huge + `"}`)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, RegisterPath, body))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+}
+
 // registerClient is a test helper driving the registration endpoint the
 // same way a real client would, rather than calling EncodeClientID
 // directly, so these tests exercise the actual HTTP contract.
@@ -216,6 +275,15 @@ func TestAuthorizeGetValidRequest(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "api_key") {
 		t.Fatal("expected the consent form to include an api_key field")
+	}
+	// The redirect destination must be visible on the page, not only carried
+	// through as a hidden form field: the resource owner is the only check
+	// against an attacker-registered client delivering their credential
+	// somewhere other than where "ClientName" claims. See
+	// TestRegisterRejectsNonHTTPSRedirectURIScheme for the companion
+	// registration-time restriction.
+	if !strings.Contains(rec.Body.String(), `class="destination"`) {
+		t.Fatal("expected the consent form to visibly display the redirect destination")
 	}
 }
 
@@ -391,6 +459,74 @@ func TestTokenExchangeOmitsRefreshTokenWhenDisabled(t *testing.T) {
 	}
 }
 
+// redirect_uri is mandatory when a code is issued (parseAuthorizeRequest
+// requires it), so per OAuth 2.1 §4.1.3 it must be required and checked at
+// the token endpoint too -- never skipped just because a client omits it.
+func TestTokenExchangeRequiresRedirectURI(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{acceptedKey: "1-goodkey"}, time.Hour)
+	clientID := registerClient(t, mux, testRedirectURI)
+	verifier, challenge := pkcePair()
+
+	authRec := doAuthorizePost(t, mux, url.Values{
+		"client_id":             {clientID},
+		"redirect_uri":          {testRedirectURI},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		"api_key":               {"1-goodkey"},
+	})
+	loc, _ := url.Parse(authRec.Header().Get("Location"))
+	code := loc.Query().Get("code")
+
+	rec := doTokenPost(t, mux, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+	var body oauthError
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if body.Error != "invalid_request" {
+		t.Errorf("error = %q, want invalid_request", body.Error)
+	}
+}
+
+func TestTokenExchangeRejectsMismatchedRedirectURI(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{acceptedKey: "1-goodkey"}, time.Hour)
+	clientID := registerClient(t, mux, testRedirectURI)
+	verifier, challenge := pkcePair()
+
+	authRec := doAuthorizePost(t, mux, url.Values{
+		"client_id":             {clientID},
+		"redirect_uri":          {testRedirectURI},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		"api_key":               {"1-goodkey"},
+	})
+	loc, _ := url.Parse(authRec.Header().Get("Location"))
+	code := loc.Query().Get("code")
+
+	rec := doTokenPost(t, mux, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"redirect_uri":  {"https://claude.ai/some/other/path"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+	var body oauthError
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if body.Error != "invalid_grant" {
+		t.Errorf("error = %q, want invalid_grant", body.Error)
+	}
+}
+
 func TestTokenExchangeRejectsMismatchedVerifier(t *testing.T) {
 	_, mux := newTestMux(t, fakeValidator{acceptedKey: "1-goodkey"}, time.Hour)
 	clientID := registerClient(t, mux, testRedirectURI)
@@ -410,6 +546,7 @@ func TestTokenExchangeRejectsMismatchedVerifier(t *testing.T) {
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"code_verifier": {"the-wrong-verifier"},
+		"redirect_uri":  {testRedirectURI},
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
@@ -435,6 +572,7 @@ func TestTokenExchangeRejectsReplayedCode(t *testing.T) {
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"code_verifier": {verifier},
+		"redirect_uri":  {testRedirectURI},
 	}
 	first := doTokenPost(t, mux, form)
 	if first.Code != http.StatusOK {
@@ -473,6 +611,7 @@ func TestTokenExchangeRejectsExpiredCode(t *testing.T) {
 		"grant_type":    {"authorization_code"},
 		"code":          {expired},
 		"code_verifier": {"anything"},
+		"redirect_uri":  {testRedirectURI},
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)

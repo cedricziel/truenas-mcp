@@ -131,6 +131,7 @@ func TestOAuthEndToEndAuthenticatesMCPRequest(t *testing.T) {
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"code_verifier": {verifier},
+		"redirect_uri":  {redirectURI},
 	}
 	tokenReq := httptest.NewRequest(http.MethodPost, oauth.TokenPath, strings.NewReader(tokenForm.Encode()))
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")

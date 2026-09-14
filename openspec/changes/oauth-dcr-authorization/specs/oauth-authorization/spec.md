@@ -55,9 +55,22 @@ The server SHALL accept Dynamic Client Registration requests and issue a client 
 - **WHEN** a registration request omits a redirect URI or supplies one that is not a valid absolute URI
 - **THEN** the server refuses the registration and reports which field is invalid
 
+#### Scenario: Registration request names a redirect URI with a disallowed scheme
+
+- **WHEN** a registration request names a redirect URI that is not `https`, or is `http` on a non-loopback host
+- **THEN** the server refuses the registration
+- **AND** a client that runs its own local callback listener remains free to register an `http` redirect URI on a loopback address
+
 ### Requirement: Authorize a session by collecting the resource owner's TrueNAS credential
 
 The authorization endpoint SHALL present the resource owner with a form to supply their own TrueNAS username and API key, and SHALL validate that credential against the target before issuing an authorization code, so a bad credential is caught before the client ever attempts to use it.
+
+The consent form SHALL display the redirect URI the resulting code will be delivered to, so the resource owner has something to verify beyond the client's own self-chosen, unauthenticated name.
+
+#### Scenario: Consent form displays the redirect destination
+
+- **WHEN** the authorization endpoint renders the consent form
+- **THEN** the redirect URI the request will deliver a code to is shown as visible page content, not only carried as a hidden form field
 
 #### Scenario: Resource owner supplies a valid credential
 
@@ -83,12 +96,17 @@ The authorization endpoint SHALL present the resource owner with a form to suppl
 
 ### Requirement: Exchange an authorization code for tokens under PKCE
 
-The token endpoint SHALL exchange a valid, unexpired, previously-unused authorization code for an access token, verifying the PKCE code verifier against the code challenge recorded at authorization time.
+The token endpoint SHALL exchange a valid, unexpired, previously-unused authorization code for an access token, verifying the PKCE code verifier against the code challenge recorded at authorization time. The token endpoint SHALL also require a `redirect_uri` on this grant and SHALL verify it matches the one recorded when the code was issued, since a redirect URI is always present at that point.
 
 #### Scenario: Valid code exchange
 
-- **WHEN** a client exchanges a valid authorization code together with the matching PKCE code verifier
+- **WHEN** a client exchanges a valid authorization code together with the matching PKCE code verifier and the same redirect URI used at authorization
 - **THEN** the server issues an access token that, when presented to the MCP transport, authenticates as the TrueNAS credential collected at authorization time
+
+#### Scenario: Redirect URI is missing or does not match
+
+- **WHEN** a client exchanges an authorization code without a redirect URI, or with one that does not match the redirect URI recorded when the code was issued
+- **THEN** the server refuses the exchange and issues no token
 
 #### Scenario: Code verifier does not match
 
