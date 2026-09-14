@@ -156,6 +156,10 @@ is needed. Invalid configuration refuses to start rather than running degraded.
 | `TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT` | `false` | Connect to the target without TLS |
 | `TRUENAS_MCP_ENABLE_WRITES` | `false` | Expose mutating tools |
 | `TRUENAS_MCP_API_KEY` | — | Credential for `--stdio`; refused otherwise |
+| `TRUENAS_MCP_OAUTH_ISSUER` | — | Enables OAuth; the server's own externally-reachable base URL |
+| `TRUENAS_MCP_OAUTH_ENCRYPTION_KEY` | *generated* | 64 hex characters (32 bytes); see below |
+| `TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL` | `1h` | How long an issued OAuth access token is valid |
+| `TRUENAS_MCP_OAUTH_REFRESH_TOKEN_TTL` | `720h` (30 days) | How long a refresh token is valid; `0` disables refresh tokens |
 
 **No credential is configurable for the HTTP transport.** Callers supply their
 own with each request, and setting `TRUENAS_MCP_API_KEY` without `--stdio` is a
@@ -191,11 +195,54 @@ The key may also be sent as `X-TrueNAS-API-Key`, for clients that cannot set an
 Clients that spawn the server rather than connect to one want
 [Serving over stdio](#serving-over-stdio) instead.
 
+### Connecting an OAuth client (Claude.ai and similar)
+
+A hosted MCP client such as Claude.ai never holds a TrueNAS API key directly —
+it only speaks OAuth 2.1: discovery, Dynamic Client Registration (RFC 7591),
+and an authorization-code flow with PKCE. Set an issuer URL to turn that on:
+
+```
+docker run -p 8080:8080 \
+  -e TRUENAS_MCP_TARGET=nas.local \
+  -e TRUENAS_MCP_TLS_CERT=/tls/cert.pem \
+  -e TRUENAS_MCP_TLS_KEY=/tls/key.pem \
+  -e TRUENAS_MCP_OAUTH_ISSUER=https://your-host \
+  -e TRUENAS_MCP_OAUTH_ENCRYPTION_KEY=$(openssl rand -hex 32) \
+  ghcr.io/cedricziel/truenas-mcp:main
+```
+
+`TRUENAS_MCP_OAUTH_ISSUER` must be the exact base URL the server is reachable
+at from the client's side (no trailing slash). `TRUENAS_MCP_OAUTH_ENCRYPTION_KEY`
+seals every client registration, authorization code, and token this process
+issues; leaving it unset works, but a fresh key is generated on every restart
+and invalidates every outstanding one — set it explicitly for anything longer
+than a quick trial. Neither TrueNAS credentials nor a client/token database
+are stored anywhere: everything OAuth issues is self-contained, verified with
+this one key. See `openspec/changes/oauth-dcr-authorization/design.md` for why.
+
+Point a client at `https://your-host/mcp` the same way you would for the raw
+API key above; it discovers everything else — the authorization server, where
+to register, where to send the resource owner — from
+`/.well-known/oauth-protected-resource`. The first connection opens a browser
+consent screen asking for a TrueNAS username (optional, shown only to you) and
+API key; nothing is granted to the client until that's submitted and the
+target accepts it.
+
+`TRUENAS_MCP_ALLOW_PLAINTEXT` cannot be combined with OAuth: the consent
+screen collects a TrueNAS API key through a browser form on the same
+boundary, so TLS is required outright once `TRUENAS_MCP_OAUTH_ISSUER` is set.
+
+The raw-API-key path above keeps working unchanged and side-by-side with
+OAuth — enabling OAuth adds a second way in, it does not replace the first.
+
 ## Current state
 
 Working:
 
 - Streamable HTTP transport, per-session credentials, `401` without one
+- OAuth 2.1 with Dynamic Client Registration, for clients (Claude.ai and
+  similar) that only speak OAuth — see
+  [Connecting an OAuth client](#connecting-an-oauth-client-claudeai-and-similar)
 - Stdio transport under a single per-process credential, for clients that spawn
   the server rather than connect to one
 - JSON-RPC middleware client: concurrent calls on one connection, structured

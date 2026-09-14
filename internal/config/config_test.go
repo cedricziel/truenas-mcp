@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // env builds a getenv func from a map, so tests never touch process state.
@@ -332,5 +333,186 @@ func TestSummaryOmitsAPIKeyInStdioMode(t *testing.T) {
 	}
 	if !strings.Contains(cfg.Summary(), "transport=stdio") {
 		t.Errorf("summary should report the stdio transport, got: %s", cfg.Summary())
+	}
+}
+
+// OAuth is opt-in, switched on by the presence of an issuer URL rather than
+// a separate boolean -- see design.md's "OAuth is enabled by the presence
+// of an issuer URL" decision.
+func TestOAuthDisabledByDefault(t *testing.T) {
+	cfg, err := Load(env(validEnv(nil)), ModeHTTP)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.OAuthEnabled() {
+		t.Fatal("OAuth must be disabled when no issuer is configured")
+	}
+	if !strings.Contains(cfg.Summary(), "oauth=disabled") {
+		t.Errorf("summary should report oauth=disabled, got: %s", cfg.Summary())
+	}
+}
+
+func TestOAuthEnabledByIssuer(t *testing.T) {
+	cfg, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ISSUER": "https://truenas-mcp.example.com",
+	})), ModeHTTP)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !cfg.OAuthEnabled() {
+		t.Fatal("setting the issuer URL should enable OAuth")
+	}
+	if !strings.Contains(cfg.Summary(), "oauth=enabled") {
+		t.Errorf("summary should report oauth=enabled, got: %s", cfg.Summary())
+	}
+}
+
+func TestOAuthRejectsMalformedIssuer(t *testing.T) {
+	_, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ISSUER": "not a url",
+	})), ModeHTTP)
+	if err == nil {
+		t.Fatal("expected an error for a malformed issuer URL")
+	}
+	if !strings.Contains(err.Error(), "TRUENAS_MCP_OAUTH_ISSUER") {
+		t.Fatalf("error must name the offending variable, got: %v", err)
+	}
+}
+
+// TestLoadRefusesPlaintextWithoutOverride already covers the case where
+// TLS is entirely absent; this covers the OAuth-specific rule that the
+// override itself is refused, independent of whether TLS is also set.
+func TestOAuthRefusesPlaintextOverride(t *testing.T) {
+	_, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ISSUER":    "https://truenas-mcp.example.com",
+		"TRUENAS_MCP_ALLOW_PLAINTEXT": "true",
+		"TRUENAS_MCP_TLS_CERT":        "/tls/cert.pem",
+		"TRUENAS_MCP_TLS_KEY":         "/tls/key.pem",
+	})), ModeHTTP)
+	if err == nil {
+		t.Fatal("expected an error when the plaintext override is set with OAuth enabled")
+	}
+	if !strings.Contains(err.Error(), "TLS") {
+		t.Fatalf("error must state that TLS is required, got: %v", err)
+	}
+}
+
+func TestOAuthGeneratesEphemeralKeyAndWarns(t *testing.T) {
+	cfg, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ISSUER": "https://truenas-mcp.example.com",
+	})), ModeHTTP)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	var zero [32]byte
+	if cfg.OAuthKey() == zero {
+		t.Fatal("an ephemeral key should have been generated")
+	}
+
+	found := false
+	for _, w := range cfg.Warnings() {
+		if strings.Contains(w, "TRUENAS_MCP_OAUTH_ENCRYPTION_KEY") && strings.Contains(w, "Restarting invalidates") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a restart-invalidation warning, got: %v", cfg.Warnings())
+	}
+}
+
+func TestOAuthConfiguredKeyProducesNoGeneratedKeyWarning(t *testing.T) {
+	const key = "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	cfg, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ISSUER":         "https://truenas-mcp.example.com",
+		"TRUENAS_MCP_OAUTH_ENCRYPTION_KEY": key[:64],
+	})), ModeHTTP)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	for _, w := range cfg.Warnings() {
+		if strings.Contains(w, "was generated for this process") {
+			t.Fatalf("supplying a key should not warn that one was generated, got: %v", cfg.Warnings())
+		}
+	}
+}
+
+func TestOAuthRejectsMalformedEncryptionKey(t *testing.T) {
+	_, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ISSUER":         "https://truenas-mcp.example.com",
+		"TRUENAS_MCP_OAUTH_ENCRYPTION_KEY": "not-hex",
+	})), ModeHTTP)
+	if err == nil {
+		t.Fatal("expected an error for a malformed encryption key")
+	}
+	if !strings.Contains(err.Error(), "TRUENAS_MCP_OAUTH_ENCRYPTION_KEY") {
+		t.Fatalf("error must name the offending variable, got: %v", err)
+	}
+}
+
+func TestOAuthTokenTTLDefaults(t *testing.T) {
+	cfg, err := Load(env(validEnv(nil)), ModeHTTP)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.OAuthAccessTokenTTL != DefaultOAuthAccessTokenTTL {
+		t.Fatalf("OAuthAccessTokenTTL = %v, want %v", cfg.OAuthAccessTokenTTL, DefaultOAuthAccessTokenTTL)
+	}
+	if cfg.OAuthRefreshTokenTTL != DefaultOAuthRefreshTokenTTL {
+		t.Fatalf("OAuthRefreshTokenTTL = %v, want %v", cfg.OAuthRefreshTokenTTL, DefaultOAuthRefreshTokenTTL)
+	}
+}
+
+func TestOAuthTokenTTLOverrides(t *testing.T) {
+	cfg, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL":  "2h",
+		"TRUENAS_MCP_OAUTH_REFRESH_TOKEN_TTL": "0",
+	})), ModeHTTP)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.OAuthAccessTokenTTL != 2*time.Hour {
+		t.Fatalf("OAuthAccessTokenTTL = %v, want 2h", cfg.OAuthAccessTokenTTL)
+	}
+	if cfg.OAuthRefreshTokenTTL != 0 {
+		t.Fatalf("OAuthRefreshTokenTTL = %v, want 0 (refresh tokens disabled)", cfg.OAuthRefreshTokenTTL)
+	}
+}
+
+func TestOAuthRejectsMalformedTTL(t *testing.T) {
+	_, err := Load(env(validEnv(map[string]string{
+		"TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL": "not-a-duration",
+	})), ModeHTTP)
+	if err == nil {
+		t.Fatal("expected an error for a malformed TTL")
+	}
+	if !strings.Contains(err.Error(), "TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL") {
+		t.Fatalf("error must name the offending variable, got: %v", err)
+	}
+}
+
+// Stdio mode is single-user, single-process, and never opens the HTTP
+// listener OAuth's endpoints would be served on -- see the analogous
+// listen/TLS/plaintext cases above.
+func TestStdioModeWarnsOnOAuthIssuer(t *testing.T) {
+	cfg, err := Load(env(map[string]string{
+		"TRUENAS_MCP_TARGET":       "nas.local",
+		"TRUENAS_MCP_API_KEY":      "1-somekey",
+		"TRUENAS_MCP_OAUTH_ISSUER": "https://truenas-mcp.example.com",
+	}), ModeStdio)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.OAuthEnabled() {
+		t.Fatal("OAuth must not be considered enabled in stdio mode")
+	}
+	found := false
+	for _, w := range cfg.Warnings() {
+		if strings.Contains(w, "TRUENAS_MCP_OAUTH_ISSUER") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a warning naming TRUENAS_MCP_OAUTH_ISSUER, got: %v", cfg.Warnings())
 	}
 }

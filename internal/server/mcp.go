@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
+	"github.com/cedricziel/truenas-mcp/internal/oauth"
 	"github.com/cedricziel/truenas-mcp/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -24,6 +26,17 @@ type MCPConfig struct {
 	// Sessions opens middleware connections under a caller's own credential.
 	// Nil in tests that exercise only the tool surface.
 	Sessions *SessionManager
+
+	// OAuthKeys unseals an OAuth access token presented as a bearer
+	// credential -- see CredentialFromRequest. Nil when OAuth is disabled,
+	// in which case only a raw TrueNAS API key is accepted, exactly as
+	// before this capability existed.
+	OAuthKeys *oauth.Keys
+
+	// ProtectedResourceMetadataURL, when non-empty, is named in the
+	// WWW-Authenticate challenge on a 401 so an OAuth-capable client can
+	// discover how to obtain a credential instead of guessing a header name.
+	ProtectedResourceMetadataURL string
 }
 
 // ServerInfoOutput reports what this server is and how it is configured, so a
@@ -219,9 +232,9 @@ func NewMCPHandler(cfg MCPConfig) http.Handler {
 }
 
 func (h *mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	apiKey, err := CredentialFromRequest(r)
+	apiKey, err := CredentialFromRequest(r, h.cfg.OAuthKeys)
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="truenas-mcp"`)
+		w.Header().Set("WWW-Authenticate", wwwAuthenticateChallenge(h.cfg.ProtectedResourceMetadataURL))
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -265,13 +278,86 @@ func credentialID(apiKey string) string {
 // It sits in front of the MCP handler so an unauthenticated caller is refused
 // at the transport rather than reaching a tool. The server holds no credential
 // of its own, so there is nothing to fall back to.
-func RequireCredential(next http.Handler) http.Handler {
+//
+// oauthKeys and resourceMetadataURL are threaded through exactly as they are
+// on MCPConfig, and mean the same thing: nil/empty when OAuth is disabled.
+func RequireCredential(oauthKeys *oauth.Keys, resourceMetadataURL string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := CredentialFromRequest(r); err != nil {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="truenas-mcp"`)
+		if _, err := CredentialFromRequest(r, oauthKeys); err != nil {
+			w.Header().Set("WWW-Authenticate", wwwAuthenticateChallenge(resourceMetadataURL))
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// wwwAuthenticateChallenge builds the Bearer challenge for a 401. Naming
+// resource_metadata, per RFC 9728, lets an OAuth-capable client discover how
+// to obtain a credential instead of guessing a header name; omitted when
+// OAuth is disabled, since there is nothing to discover.
+func wwwAuthenticateChallenge(resourceMetadataURL string) string {
+	if resourceMetadataURL == "" {
+		return `Bearer realm="truenas-mcp"`
+	}
+	return fmt.Sprintf(`Bearer realm="truenas-mcp", resource_metadata=%q`, resourceMetadataURL)
+}
+
+// SessionCredentialValidator adapts SessionManager to oauth.CredentialValidator,
+// so the authorization endpoint validates a resource owner's submitted
+// TrueNAS credential the same way every other credential path in this
+// server does -- see SessionManager.Open -- just one step earlier, so a bad
+// credential is caught before any client attempts to use it. The probe
+// connection is closed immediately: it exists only to prove the credential
+// works, not to serve anything.
+type SessionCredentialValidator struct {
+	Sessions *SessionManager
+}
+
+// Validate implements oauth.CredentialValidator.
+func (v SessionCredentialValidator) Validate(ctx context.Context, apiKey string) error {
+	sess, err := v.Sessions.Open(ctx, apiKey)
+	if err != nil {
+		return err
+	}
+	// Login and the version check inside Open already succeeded, so the
+	// credential is valid regardless of what happens next -- a failure
+	// closing this probe connection (already-severed socket, say) must not
+	// be reported as a rejected credential.
+	_ = sess.Close()
+	return nil
+}
+
+// MountOAuth builds the OAuth authorization server and registers its routes
+// on mux alongside the MCP handler, or does nothing if issuer is empty
+// (OAuth disabled -- see config.Config.OAuthEnabled, whose presence-based
+// switch this mirrors).
+//
+// The two returned values are exactly what MCPConfig.OAuthKeys and
+// MCPConfig.ProtectedResourceMetadataURL need: a caller wires them straight
+// through so the MCP handler accepts the tokens this authorization server
+// issues and its 401 challenge points back at this same server's discovery
+// document.
+func MountOAuth(
+	mux *http.ServeMux,
+	sessions *SessionManager,
+	issuer string,
+	masterKey [32]byte,
+	accessTokenTTL, refreshTokenTTL time.Duration,
+) (oauthKeys *oauth.Keys, resourceMetadataURL string) {
+	if issuer == "" {
+		return nil, ""
+	}
+
+	keys := oauth.DeriveKeys(masterKey)
+	h := oauth.NewHandler(oauth.Config{
+		Issuer:          issuer,
+		Keys:            keys,
+		AccessTokenTTL:  accessTokenTTL,
+		RefreshTokenTTL: refreshTokenTTL,
+		Validator:       SessionCredentialValidator{Sessions: sessions},
+	})
+	h.Mount(mux)
+
+	return &keys, h.ProtectedResourceMetadataURL()
 }
