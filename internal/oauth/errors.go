@@ -28,5 +28,5 @@ func writeOAuthError(w http.ResponseWriter, status int, code, description string
 func writeOAuthProblem(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)
-	fmt.Fprintln(w, message)
+	_, _ = fmt.Fprintln(w, message)
 }

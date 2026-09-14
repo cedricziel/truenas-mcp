@@ -166,7 +166,7 @@ func TestOAuthEndToEndAuthenticatesMCPRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mcp request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("mcp initialize status = %d, want 200", resp.StatusCode)
 	}
