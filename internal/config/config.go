@@ -235,18 +235,6 @@ func (c *Config) validate() error {
 		return fmt.Errorf("TRUENAS_MCP_TLS_CERT and TRUENAS_MCP_TLS_KEY must be set together")
 	}
 
-	// The authorization endpoint collects a TrueNAS API key through a
-	// browser form on this same boundary, so OAuth refuses the plaintext
-	// override outright -- unlike the raw-bearer-key path below, there is no
-	// case where an operator already holds the secret and is choosing to
-	// transmit it insecurely.
-	if c.OAuthEnabled() && c.AllowPlaintext {
-		return fmt.Errorf(
-			"refusing to enable OAuth with TRUENAS_MCP_ALLOW_PLAINTEXT set: TLS is required whenever " +
-				"TRUENAS_MCP_OAUTH_ISSUER is configured, since the authorization endpoint collects a " +
-				"TrueNAS API key through a browser form on this same connection")
-	}
-
 	// Caller credentials travel on the MCP boundary, so refuse to serve them
 	// in the clear unless the operator says so explicitly.
 	if !c.TLSEnabled() && !c.AllowPlaintext {

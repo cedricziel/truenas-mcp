@@ -146,20 +146,20 @@ Settings that concern the target rather than the listener still apply, including
 All configuration is environment variables; no config file or persistent volume
 is needed. Invalid configuration refuses to start rather than running degraded.
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `TRUENAS_MCP_TARGET` | *required* | TrueNAS host, optionally `host:port` |
-| `TRUENAS_MCP_LISTEN` | `:8080` | Bind address |
-| `TRUENAS_MCP_TLS_CERT` / `TRUENAS_MCP_TLS_KEY` | — | Serve MCP over TLS |
-| `TRUENAS_MCP_ALLOW_PLAINTEXT` | `false` | Serve without TLS (see below) |
-| `TRUENAS_MCP_TARGET_INSECURE` | `false` | Accept the target's certificate unverified |
-| `TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT` | `false` | Connect to the target without TLS |
-| `TRUENAS_MCP_ENABLE_WRITES` | `false` | Expose mutating tools |
-| `TRUENAS_MCP_API_KEY` | — | Credential for `--stdio`; refused otherwise |
-| `TRUENAS_MCP_OAUTH_ISSUER` | — | Enables OAuth; the server's own externally-reachable base URL |
-| `TRUENAS_MCP_OAUTH_ENCRYPTION_KEY` | *generated* | 64 hex characters (32 bytes); see below |
-| `TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL` | `1h` | How long an issued OAuth access token is valid |
-| `TRUENAS_MCP_OAUTH_REFRESH_TOKEN_TTL` | `720h` (30 days) | How long a refresh token is valid; `0` disables refresh tokens |
+| Variable                                       | Default          | Meaning                                                        |
+| ---------------------------------------------- | ---------------- | -------------------------------------------------------------- |
+| `TRUENAS_MCP_TARGET`                           | _required_       | TrueNAS host, optionally `host:port`                           |
+| `TRUENAS_MCP_LISTEN`                           | `:8080`          | Bind address                                                   |
+| `TRUENAS_MCP_TLS_CERT` / `TRUENAS_MCP_TLS_KEY` | —                | Serve MCP over TLS                                             |
+| `TRUENAS_MCP_ALLOW_PLAINTEXT`                  | `false`          | Serve without TLS (see below)                                  |
+| `TRUENAS_MCP_TARGET_INSECURE`                  | `false`          | Accept the target's certificate unverified                     |
+| `TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT`           | `false`          | Connect to the target without TLS                              |
+| `TRUENAS_MCP_ENABLE_WRITES`                    | `false`          | Expose mutating tools                                          |
+| `TRUENAS_MCP_API_KEY`                          | —                | Credential for `--stdio`; refused otherwise                    |
+| `TRUENAS_MCP_OAUTH_ISSUER`                     | —                | Enables OAuth; the server's own externally-reachable base URL  |
+| `TRUENAS_MCP_OAUTH_ENCRYPTION_KEY`             | _generated_      | 64 hex characters (32 bytes); see below                        |
+| `TRUENAS_MCP_OAUTH_ACCESS_TOKEN_TTL`           | `1h`             | How long an issued OAuth access token is valid                 |
+| `TRUENAS_MCP_OAUTH_REFRESH_TOKEN_TTL`          | `720h` (30 days) | How long a refresh token is valid; `0` disables refresh tokens |
 
 **No credential is configurable for the HTTP transport.** Callers supply their
 own with each request, and setting `TRUENAS_MCP_API_KEY` without `--stdio` is a
@@ -228,9 +228,10 @@ consent screen asking for a TrueNAS username (optional, shown only to you) and
 API key; nothing is granted to the client until that's submitted and the
 target accepts it.
 
-`TRUENAS_MCP_ALLOW_PLAINTEXT` cannot be combined with OAuth: the consent
-screen collects a TrueNAS API key through a browser form on the same
-boundary, so TLS is required outright once `TRUENAS_MCP_OAUTH_ISSUER` is set.
+`TRUENAS_MCP_ALLOW_PLAINTEXT` works the same way it does for the raw-API-key
+path: it is meant for a reverse proxy that terminates TLS at the edge and
+forwards plaintext to this process, not for exposing the consent screen over
+the open internet unencrypted.
 
 The raw-API-key path above keeps working unchanged and side-by-side with
 OAuth — enabling OAuth adds a second way in, it does not replace the first.
@@ -247,37 +248,37 @@ Working:
   the server rather than connect to one
 - JSON-RPC middleware client: concurrent calls on one connection, structured
   errors distinguishing unreachable / unauthenticated / unauthorized / rate
-  limited, and interrupted requests reported as *may have been applied*
+  limited, and interrupted requests reported as _may have been applied_
 - Session reconnection when a connection dies, and refusal to run against a
   release older than 25.04
 - Container image, CI, GHCR publication, TrueNAS app deployment
 
-**Not implemented:** job progress via resource *subscription*. Polling covers
+**Not implemented:** job progress via resource _subscription_. Polling covers
 the same ground and is the path the design treats as reliable — subscription
 was always an enhancement over it, and MCP client support for it is thin.
 
 ### Tools
 
-| Tool | Operations |
-|---|---|
-| `storage` | `list_pools`, `show_pool`, `list_datasets`, `show_dataset`, `list_snapshots` |
-| `system` | `info`, `alerts`, `list_services`, `update_status`, `version`, `audit_log` |
-| `sharing` | `list_smb`, `show_smb`, `smb_acl`, `list_nfs`, `show_nfs`, `list_web` |
-| `virtualization` | `list_vms`, `show_vm`, `vm_devices`, `list_containers`, `show_container`, `container_devices` |
-| `backup` | `list_cloud_syncs`, `show_cloud_sync`, `cloud_credentials`, `list_replications`, `show_replication`, `list_rsync_tasks`, `list_snapshot_tasks` |
-| `filesystem` | `list_directory`, `stat`, `space`, `acl` |
-| `apps` | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports` |
-| `catalog` | `list`, `categories`, `show` |
-| `jobs` | `list`, `show` |
-| `search_methods` | find middleware methods by name |
-| `describe_method` | a method's arguments, summarised |
-| `call_method` | invoke a method directly |
-| `server_info` | — |
-| `system_info` | — |
+| Tool              | Operations                                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `storage`         | `list_pools`, `show_pool`, `list_datasets`, `show_dataset`, `list_snapshots`                                                                   |
+| `system`          | `info`, `alerts`, `list_services`, `update_status`, `version`, `audit_log`                                                                     |
+| `sharing`         | `list_smb`, `show_smb`, `smb_acl`, `list_nfs`, `show_nfs`, `list_web`                                                                          |
+| `virtualization`  | `list_vms`, `show_vm`, `vm_devices`, `list_containers`, `show_container`, `container_devices`                                                  |
+| `backup`          | `list_cloud_syncs`, `show_cloud_sync`, `cloud_credentials`, `list_replications`, `show_replication`, `list_rsync_tasks`, `list_snapshot_tasks` |
+| `filesystem`      | `list_directory`, `stat`, `space`, `acl`                                                                                                       |
+| `apps`            | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports`                                |
+| `catalog`         | `list`, `categories`, `show`                                                                                                                   |
+| `jobs`            | `list`, `show`                                                                                                                                 |
+| `search_methods`  | find middleware methods by name                                                                                                                |
+| `describe_method` | a method's arguments, summarised                                                                                                               |
+| `call_method`     | invoke a method directly                                                                                                                       |
+| `server_info`     | —                                                                                                                                              |
+| `system_info`     | —                                                                                                                                              |
 
 Every tool declares a complete MCP annotation set — `title`, `readOnlyHint`,
 `destructiveHint`, `idempotentHint`, `openWorldHint`. The spec defaults for
-`destructiveHint` and `openWorldHint` are *true*, so an unset field does not
+`destructiveHint` and `openWorldHint` are _true_, so an unset field does not
 mean "unknown", it means "assume the worst" — and a read tool treated as
 destructive produces prompts on safe operations, which is what teaches people
 to click through the prompts that matter.
@@ -287,7 +288,7 @@ verified against the target's own RBAC metadata to grant `READONLY_ADMIN`,
 so "this tool cannot mutate" is checked rather than asserted.
 
 The `apps` operations `outdated_images`, `upgrade_summary`, and
-`rollback_versions` exist so a caller can decide *whether* to act before the
+`rollback_versions` exist so a caller can decide _whether_ to act before the
 write tier can act — a mutation surface without them forces the model to
 guess. All three take an app `name`; the middleware has no fleet-wide
 equivalent.
@@ -308,30 +309,30 @@ by name, with no separate `catalog.get_app_details` call needed.
 
 Off by default. Set `TRUENAS_MCP_ENABLE_WRITES=true` to expose them.
 
-| Tool | Effect | Annotated |
-|---|---|---|
-| `app_pull_images` | pull latest images and redeploy | destructive |
-| `app_redeploy` | redeploy without pulling | destructive |
-| `app_stop` | stop a running app | destructive, idempotent |
-| `app_upgrade` | upgrade to a newer version | destructive |
-| `app_rollback` | roll back a bad upgrade or pull | destructive |
-| `app_start` | start a stopped app | idempotent |
-| `create_snapshot` | snapshot a dataset | additive |
-| `create_smb_share` | share a path over SMB | additive |
-| `update_smb_share` | change an SMB share | destructive |
-| `delete_smb_share` | stop sharing over SMB | destructive |
-| `create_nfs_export` | export a path over NFS | additive |
-| `update_nfs_export` | change an NFS export | destructive |
-| `delete_nfs_export` | stop exporting over NFS | destructive |
-| `set_smb_share_acl` | who may connect to a share | destructive |
-| `set_path_acl` | filesystem permissions on a path | destructive |
+| Tool                | Effect                           | Annotated               |
+| ------------------- | -------------------------------- | ----------------------- |
+| `app_pull_images`   | pull latest images and redeploy  | destructive             |
+| `app_redeploy`      | redeploy without pulling         | destructive             |
+| `app_stop`          | stop a running app               | destructive, idempotent |
+| `app_upgrade`       | upgrade to a newer version       | destructive             |
+| `app_rollback`      | roll back a bad upgrade or pull  | destructive             |
+| `app_start`         | start a stopped app              | idempotent              |
+| `create_snapshot`   | snapshot a dataset               | additive                |
+| `create_smb_share`  | share a path over SMB            | additive                |
+| `update_smb_share`  | change an SMB share              | destructive             |
+| `delete_smb_share`  | stop sharing over SMB            | destructive             |
+| `create_nfs_export` | export a path over NFS           | additive                |
+| `update_nfs_export` | change an NFS export             | destructive             |
+| `delete_nfs_export` | stop exporting over NFS          | destructive             |
+| `set_smb_share_acl` | who may connect to a share       | destructive             |
+| `set_path_acl`      | filesystem permissions on a path | destructive             |
 
 **Share and permission configuration is the point.** It is the hardest part of
 running TrueNAS and the least destructive: a misconfigured share is a support
 thread, not data loss. Handing that to an assistant is squarely what this
 server is for.
 
-The one genuine hazard lives in an *argument*, not a method. `filesystem.setacl`
+The one genuine hazard lives in an _argument_, not a method. `filesystem.setacl`
 accepts `recursive`, `traverse`, and `stripacl` — recursive plus stripacl walks
 a whole dataset discarding every ACL, which locks people out of terabytes and
 cannot be undone without knowing what the previous permissions were. All three
@@ -389,17 +390,17 @@ worse. Pass `full=true` when you really want it.
 
 ### Resources
 
-| URI | Content |
-|---|---|
-| `truenas://alerts` | current alerts |
-| `truenas://system/health` | version, hostname, uptime, hardware |
-| `truenas://pools` | pools with capacity and health |
-| `truenas://apps` | installed apps and their state |
-| `truenas://job/{id}` | a long-running operation's progress |
-| `truenas://docs/query-filters` | filter syntax for `call_method` |
-| `truenas://docs/dataset-properties` | ZFS field meanings and inheritance |
+| URI                                 | Content                             |
+| ----------------------------------- | ----------------------------------- |
+| `truenas://alerts`                  | current alerts                      |
+| `truenas://system/health`           | version, hostname, uptime, hardware |
+| `truenas://pools`                   | pools with capacity and health      |
+| `truenas://apps`                    | installed apps and their state      |
+| `truenas://job/{id}`                | a long-running operation's progress |
+| `truenas://docs/query-filters`      | filter syntax for `call_method`     |
+| `truenas://docs/dataset-properties` | ZFS field meanings and inheritance  |
 
-Resources differ from tools by *control locus*, not cost: tools are
+Resources differ from tools by _control locus_, not cost: tools are
 model-controlled, resources are what a person attaches. They pay off when a
 human points at one — no round trip, no tool budget — and underperform when a
 model has to go find them, since model-driven resource access routes through
