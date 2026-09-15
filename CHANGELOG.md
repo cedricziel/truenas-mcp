@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/cedricziel/truenas-mcp/compare/v0.4.2...v0.5.0) (2026-09-15)
+
+
+### Features
+
+* add OAuth 2.1 authorization with Dynamic Client Registration ([#33](https://github.com/cedricziel/truenas-mcp/issues/33)) ([a081ad6](https://github.com/cedricziel/truenas-mcp/commit/a081ad66893669b49ef9189584e392bf3b3ba03d))
+
+
+### Bug Fixes
+
+* **oauth:** allow the plaintext override behind a reverse proxy ([#34](https://github.com/cedricziel/truenas-mcp/issues/34)) ([ecd14c9](https://github.com/cedricziel/truenas-mcp/commit/ecd14c9ccf84a9d8936192f367c7c520ef0f4958))
+
+
+### Build and Packaging
+
+* bump golang from 1.26-alpine to 1.27-alpine ([#31](https://github.com/cedricziel/truenas-mcp/issues/31)) ([5cee8cc](https://github.com/cedricziel/truenas-mcp/commit/5cee8cc90f31c3655c052204a398cdff153eeefe))
+
 ## [0.4.2](https://github.com/cedricziel/truenas-mcp/compare/v0.4.1...v0.4.2) (2026-08-11)
 
 
