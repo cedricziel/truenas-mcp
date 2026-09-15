@@ -55,6 +55,16 @@ services:
       # with volume removal stay unreachable regardless of this setting.
       TRUENAS_MCP_ENABLE_WRITES: "true"
 
+      # Uncomment to let OAuth clients (Claude.ai and similar) connect
+      # without holding a TrueNAS API key directly -- see "Connecting an
+      # OAuth client" in the README. TRUENAS_MCP_OAUTH_ISSUER must be the
+      # exact https URL the reverse proxy in front of this container exposes
+      # it at. TRUENAS_MCP_ALLOW_PLAINTEXT above still applies unchanged: the
+      # reverse proxy terminates TLS, this process does not need its own
+      # certificate.
+      # TRUENAS_MCP_OAUTH_ISSUER: "https://your-host"
+      # TRUENAS_MCP_OAUTH_ENCRYPTION_KEY: "<openssl rand -hex 32>"
+
     healthcheck:
       # The image is distroless and carries no shell or curl, so the health
       # check runs the binary's own probe subcommand.

@@ -168,7 +168,7 @@ A request bearing a valid OAuth access token SHALL be authenticated as the TrueN
 
 Registered clients, authorization codes, access tokens, and refresh tokens SHALL be representable entirely as values the server can verify using an in-memory key, without writing any of them to a mounted file, dataset, or external store.
 
-Whether a restart invalidates them depends entirely on whether that key is stable across the restart: a configured key that does not change preserves them, and their absence or change does not, by design -- the server has nothing to compare an incoming key against except itself, so it cannot detect or warn about the "operator configured a *different* key" case the way it can the "no key was configured at all" case below.
+Whether a restart invalidates them depends entirely on whether that key is stable across the restart: a configured key that does not change preserves them, and their absence or change does not, by design -- the server has nothing to compare an incoming key against except itself, so it cannot detect or warn about the "operator configured a _different_ key" case the way it can the "no key was configured at all" case below.
 
 #### Scenario: Server restarts with a stable configured key
 
@@ -183,12 +183,11 @@ Whether a restart invalidates them depends entirely on whether that key is stabl
 - **AND** every previously issued client registration, authorization code, and token becomes unverifiable
 - **AND** the operator is warned at startup that this happened
 
-### Requirement: Refuse plaintext once OAuth is enabled
+### Requirement: Plaintext override applies the same with OAuth enabled
 
-The server SHALL refuse to start with the plaintext override set while an OAuth issuer is configured, because the authorization endpoint collects a TrueNAS credential through a browser form on this same boundary.
+The server SHALL accept the plaintext override while an OAuth issuer is configured, on the same terms as without OAuth: it is meant for a reverse proxy that terminates TLS at the edge and forwards plaintext to this process, not for exposing the authorization endpoint's browser form unencrypted to the open internet.
 
 #### Scenario: Plaintext override set with OAuth enabled
 
 - **WHEN** the operator sets the plaintext override while an OAuth issuer URL is also configured
-- **THEN** the server refuses to start
-- **AND** it reports that TLS is required whenever OAuth is enabled
+- **THEN** the server starts normally with OAuth enabled

@@ -2,7 +2,7 @@
 
 See proposal.md - Why/What Changes for motivation. The constraints that shape this design:
 
-- The server holds no TrueNAS credential of its own today (`internal/config/config.go`, `openspec/specs/mcp-transport/spec.md`). Every HTTP session is bounded by a credential its caller supplied. OAuth must be a new *transport* for that same caller-supplied credential, not a new trust root that could serve a session independent of it.
+- The server holds no TrueNAS credential of its own today (`internal/config/config.go`, `openspec/specs/mcp-transport/spec.md`). Every HTTP session is bounded by a credential its caller supplied. OAuth must be a new _transport_ for that same caller-supplied credential, not a new trust root that could serve a session independent of it.
 - TrueNAS itself is not an OAuth/OIDC provider, so there is no upstream authorization server to redirect to. truenas-mcp has to play the authorization server role itself.
 - The server's whole configuration story is environment variables only — "no mounted file and no persistent dataset" (`internal/config/config.go` package doc). It is deployed as a container on the TrueNAS appliance it manages, where attaching a database or a persistent volume for OAuth state is disproportionate to what OAuth actually needs to remember.
 - Existing credential extraction (`CredentialFromRequest` in `internal/server/session.go`) and session establishment (`SessionManager` in the same file) already do exactly what an OAuth-authenticated request still needs at the end of the day: turn a bearer value into a live, per-caller middleware connection. OAuth should feed that same pipe rather than replace it.
@@ -10,11 +10,13 @@ See proposal.md - Why/What Changes for motivation. The constraints that shape th
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Let an OAuth 2.1 client that only knows the server's URL (Claude.ai's connector flow) discover, register, obtain user consent, and receive a working access token, with zero pre-shared configuration.
 - Preserve the existing invariant: every session still runs under a TrueNAS credential the resource owner supplied, at their own privilege level; the server still holds no credential that could serve a session on its own.
 - Keep the server appliance-friendly: no database, no persistent volume, survivable container restarts for the common case (operator sets one more env var).
 
 **Non-Goals:**
+
 - No OpenID Connect identity layer (no ID tokens, no `userinfo` endpoint, no notion of "who is this human" beyond the TrueNAS credential they typed in). MCP authorization only needs an access token that grants API access, not identity.
 - No confidential-client support (`client_secret`, `client_secret`-authenticated token requests). MCP clients are treated as public clients and PKCE is mandatory instead, matching how Claude.ai and the reference MCP SDKs register today.
 - No scopes narrower than "whatever this TrueNAS credential can do." The server already delegates all privilege bounding to TrueNAS; inventing MCP-side scopes on top would be a second, redundant authorization model.
@@ -25,9 +27,9 @@ See proposal.md - Why/What Changes for motivation. The constraints that shape th
 
 ### Stateless, encrypted self-contained tokens instead of a client/token store
 
-**Decision:** Registered clients, authorization codes, access tokens, and refresh tokens are all *self-contained*: each is a value the server can verify and decrypt using one symmetric key it holds, rather than a row looked up in a database. The server's only new piece of long-lived state is that one key.
+**Decision:** Registered clients, authorization codes, access tokens, and refresh tokens are all _self-contained_: each is a value the server can verify and decrypt using one symmetric key it holds, rather than a row looked up in a database. The server's only new piece of long-lived state is that one key.
 
-- `client_id` returned from Dynamic Client Registration encodes the registered `redirect_uris`, `client_name`, and `created_at`, HMAC-signed so a client can't forge or widen its own redirect URIs later. This does not need to be *confidential* — only tamper-evident — since client metadata isn't a secret.
+- `client_id` returned from Dynamic Client Registration encodes the registered `redirect_uris`, `client_name`, and `created_at`, HMAC-signed so a client can't forge or widen its own redirect URIs later. This does not need to be _confidential_ — only tamper-evident — since client metadata isn't a secret.
 - Authorization codes, access tokens, and refresh tokens encode the resource owner's TrueNAS username + API key, the associated `client_id`/`redirect_uri`, and an expiry, sealed with an AEAD cipher (the payload is a secret, so it must be both tamper-evident and confidential).
 
 **Alternative considered:** a persistent store (embedded KV file, SQLite, external database) for clients and tokens, enabling real server-side revocation and a normal expiry sweep. Rejected as disproportionate: it would be the first piece of durable state this server has ever needed, would need a mounted volume or dataset (which the project has deliberately avoided since the original design, per `config.go`'s package doc), and gains only two things this design gets a weaker but adequate version of anyway — see the revocation trade-off below.
@@ -36,7 +38,7 @@ See proposal.md - Why/What Changes for motivation. The constraints that shape th
 
 ### The encryption key is an env var, generated ephemerally if absent
 
-**Decision:** `TRUENAS_MCP_OAUTH_ENCRYPTION_KEY` holds a 32-byte key (base64 or hex). If unset while OAuth is enabled, the server generates a random key at startup and emits a warning that restarting the process invalidates every outstanding OAuth registration/code/token (the underlying TrueNAS credentials on the target are never affected — only the wrapper around them). This mirrors the existing `TRUENAS_MCP_API_KEY`-in-stdio-mode pattern: a secret an operator can supply through the environment, with the server refusing to silently make one up a *credential* but permitting an ephemeral *wrapper key* so OAuth works out of the box for a quick trial.
+**Decision:** `TRUENAS_MCP_OAUTH_ENCRYPTION_KEY` holds a 32-byte key (base64 or hex). If unset while OAuth is enabled, the server generates a random key at startup and emits a warning that restarting the process invalidates every outstanding OAuth registration/code/token (the underlying TrueNAS credentials on the target are never affected — only the wrapper around them). This mirrors the existing `TRUENAS_MCP_API_KEY`-in-stdio-mode pattern: a secret an operator can supply through the environment, with the server refusing to silently make one up a _credential_ but permitting an ephemeral _wrapper key_ so OAuth works out of the box for a quick trial.
 
 ### OAuth is enabled by the presence of an issuer URL, not a separate boolean
 
@@ -62,9 +64,9 @@ See proposal.md - Why/What Changes for motivation. The constraints that shape th
 
 **Decision:** `CredentialFromRequest` gains a branch that recognizes the OAuth access token's format (a distinct, versioned prefix) and decrypts it; anything else is still treated as a raw TrueNAS API key exactly as today. There is no migration step and no deprecation — operators who already script against the raw header keep working unmodified, and the two forms can be used side-by-side by different callers.
 
-### Plaintext is refused outright once OAuth is enabled, with no override
+### Plaintext with OAuth follows the same override as the raw-bearer-key path
 
-**Decision:** `AllowPlaintext` (`TRUENAS_MCP_ALLOW_PLAINTEXT`) is rejected at config validation time when `TRUENAS_MCP_OAUTH_ISSUER` is set. The existing plaintext override exists for a caller who already holds a secret and chooses to transmit it insecurely; the OAuth consent screen *collects* that secret via an HTML form in a browser, which is a meaningfully different — and less recoverable — exposure to ask an operator to opt out of.
+**Decision (revised):** `AllowPlaintext` (`TRUENAS_MCP_ALLOW_PLAINTEXT`) is accepted with OAuth enabled, on the same terms as the raw-bearer-key path: the override is for a reverse proxy that terminates TLS at the edge and forwards plaintext to this process over a trusted network, not for exposing the consent screen unencrypted to the open internet. An earlier version of this decision refused the combination outright, reasoning that the consent screen _collecting_ a secret via an HTML form was meaningfully riskier than a caller transmitting one it already holds — but that reasoning conflated the browser-to-edge hop (which the reverse proxy still encrypts) with the edge-to-process hop (which was already plaintext-by-choice for the raw-key path), and required every OAuth deployment to terminate TLS inside the container even when a reverse proxy already does so in front of it.
 
 ## Risks / Trade-offs
 

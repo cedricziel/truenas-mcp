@@ -380,20 +380,23 @@ func TestOAuthRejectsMalformedIssuer(t *testing.T) {
 }
 
 // TestLoadRefusesPlaintextWithoutOverride already covers the case where
-// TLS is entirely absent; this covers the OAuth-specific rule that the
-// override itself is refused, independent of whether TLS is also set.
-func TestOAuthRefusesPlaintextOverride(t *testing.T) {
-	_, err := Load(env(validEnv(map[string]string{
+// neither TLS nor the override is set; OAuth does not add a stricter rule
+// on top of that shared one. A reverse proxy that terminates TLS at the
+// edge and forwards plaintext to this process is the same trust boundary
+// the raw-bearer-key path already accepts, and the consent form's secret
+// travels no further in the clear than a bearer key already does.
+func TestOAuthAllowsPlaintextOverrideBehindReverseProxy(t *testing.T) {
+	cfg, err := Load(env(validEnv(map[string]string{
 		"TRUENAS_MCP_OAUTH_ISSUER":    "https://truenas-mcp.example.com",
 		"TRUENAS_MCP_ALLOW_PLAINTEXT": "true",
-		"TRUENAS_MCP_TLS_CERT":        "/tls/cert.pem",
-		"TRUENAS_MCP_TLS_KEY":         "/tls/key.pem",
+		"TRUENAS_MCP_TLS_CERT":        "",
+		"TRUENAS_MCP_TLS_KEY":         "",
 	})), ModeHTTP)
-	if err == nil {
-		t.Fatal("expected an error when the plaintext override is set with OAuth enabled")
+	if err != nil {
+		t.Fatalf("expected OAuth to load with the plaintext override set, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "TLS") {
-		t.Fatalf("error must state that TLS is required, got: %v", err)
+	if !cfg.OAuthEnabled() {
+		t.Fatal("OAuth should still be enabled")
 	}
 }
 
