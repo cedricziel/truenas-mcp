@@ -40,7 +40,7 @@ export function hostPage() {
     if (!m || m.jsonrpc !== '2.0') return;
     window.__sent.push(m);
     if (m.method === 'ui/initialize') {
-      window.__reply(m.id, { protocolVersion: '2025-06-18', hostCapabilities: {}, hostContext: window.__hostContext });
+      window.__reply(m.id, { protocolVersion: '2026-01-26', hostCapabilities: {}, hostContext: window.__hostContext });
     } else if (m.method === 'tools/call') {
       window.__toolCalls.push({ id: m.id, params: m.params });
     }

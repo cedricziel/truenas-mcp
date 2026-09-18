@@ -35,8 +35,14 @@ const MIMEType = "text/html;profile=mcp-app"
 const Scheme = "ui://"
 
 // ProtocolVersion is the MCP Apps protocol version each view negotiates in
-// its ui/initialize request.
-const ProtocolVersion = "2025-06-18"
+// its ui/initialize request: the stable 2026-01-26 revision.
+const ProtocolVersion = "2026-01-26"
+
+// ExtensionID is how the server advertises the extension in its
+// capabilities. Declaring it is optional under the extension's own spec, but
+// a host reading server/discover can then know views exist without listing
+// resources first.
+const ExtensionID = "io.modelcontextprotocol/ui"
 
 // App is one renderable view and the tool whose result it renders.
 type App struct {

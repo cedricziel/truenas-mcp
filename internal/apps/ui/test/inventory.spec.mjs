@@ -33,7 +33,7 @@ test('performs the initialize handshake before anything else', async ({ page }) 
   await mount(page, 'inventory');
   const messages = await sent(page);
   expect(messages[0].method).toBe('ui/initialize');
-  expect(messages[0].params.protocolVersion).toBe('2025-06-18');
+  expect(messages[0].params.protocolVersion).toBe('2026-01-26');
   expect(messages[0].params.appInfo.name).toBe('truenas-inventory');
   expect(messages[1].method).toBe('ui/notifications/initialized');
 });
