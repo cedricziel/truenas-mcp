@@ -116,6 +116,10 @@ repeat, including the middleware's query filter syntax.`
 func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 	capabilities := &mcp.ServerCapabilities{}
 	capabilities.AddExtension(apps.ExtensionID, nil)
+	// Tasks exist only where jobs can be started: see registerTasks.
+	if cfg.EnableWrites && session != nil {
+		capabilities.AddExtension(TasksExtensionID, nil)
+	}
 
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "truenas-mcp",
@@ -161,6 +165,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		if cfg.EnableWrites {
 			registerWrites(srv, session)
 			registerConfigWrites(srv, session)
+			registerTasks(srv, session, newTaskRegistry())
 		}
 
 		mcp.AddTool(srv, &mcp.Tool{
