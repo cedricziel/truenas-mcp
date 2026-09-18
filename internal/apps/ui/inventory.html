@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrueNAS inventory</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --fg: #1a1d21; --muted: #5c6470; --line: #e3e6ea;
+    --panel: #f6f7f9; --accent: #0e7490; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+    --bar: #d5dae0;
+  }
+  :root[data-theme="dark"] {
+    --bg: #15181c; --fg: #e6e8eb; --muted: #9aa3ad; --line: #2b3138;
+    --panel: #1d2126; --accent: #22b8d6; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --bar: #343b44;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px 16px; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 10px; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .sub { color: var(--muted); }
+  .controls { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  input[type=search] { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--fg); min-width: 160px; }
+  button { padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--panel); color: var(--fg); cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  .status { color: var(--muted); font-size: 12px; min-height: 1em; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 10px 0; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .tile .n { font-size: 20px; font-weight: 600; }
+  .tile .l { color: var(--muted); font-size: 12px; }
+  section { margin-top: 14px; }
+  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin: 0 0 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bar { height: 6px; background: var(--bar); border-radius: 3px; overflow: hidden; min-width: 80px; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .bar.warn i { background: var(--warn); }
+  .bar.bad i { background: var(--bad); }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .empty { color: var(--muted); font-style: italic; }
+  .err { color: var(--bad); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">TrueNAS inventory</h1>
+  <span class="sub" id="subtitle"></span>
+  <div class="controls">
+    <input id="filter" type="search" placeholder="Filter by name…" aria-label="Filter by name">
+    <button id="refresh" type="button">Refresh</button>
+  </div>
+</header>
+<div class="status" id="status">Waiting for inventory…</div>
+<div id="view" class="hidden">
+  <div class="tiles" id="tiles"></div>
+  <div id="sections"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- Minimal MCP Apps host channel: JSON-RPC 2.0 over postMessage. ----
+  // Inline rather than the ext-apps SDK so the document needs nothing the
+  // host's default CSP would block.
+  var pending = new Map();
+  var nextId = 1;
+
+  function send(msg) { window.parent.postMessage(msg, '*'); }
+
+  function request(method, params) {
+    var id = nextId++;
+    return new Promise(function (resolve, reject) {
+      pending.set(id, { resolve: resolve, reject: reject });
+      send({ jsonrpc: '2.0', id: id, method: method, params: params || {} });
+    });
+  }
+
+  function notify(method, params) {
+    send({ jsonrpc: '2.0', method: method, params: params || {} });
+  }
+
+  var handlers = {
+    'ui/notifications/tool-input': function () { setStatus('Collecting inventory…'); setBusy(true); },
+    'ui/notifications/tool-result': function (params) { setBusy(false); renderResult(params || {}); },
+    'ui/notifications/tool-cancelled': function (params) {
+      setBusy(false);
+      setStatus('Cancelled' + (params && params.reason ? ': ' + params.reason : '.'));
+    },
+    'ui/notifications/host-context-changed': function (params) { applyContext(params || {}); }
+  };
+
+  window.addEventListener('message', function (ev) {
+    var m = ev.data;
+    if (!m || m.jsonrpc !== '2.0') return;
+
+    if (m.id !== undefined && m.method === undefined) {
+      var p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id);
+      if (m.error) p.reject(new Error(m.error.message || 'request failed'));
+      else p.resolve(m.result);
+      return;
+    }
+
+    if (m.method === 'ui/resource-teardown') {
+      send({ jsonrpc: '2.0', id: m.id, result: {} });
+      return;
+    }
+    var h = handlers[m.method];
+    if (h) h(m.params);
+  });
+
+  function applyContext(ctx) {
+    if (ctx.theme === 'dark' || ctx.theme === 'light') {
+      document.documentElement.setAttribute('data-theme', ctx.theme);
+    }
+  }
+
+  function reportSize() {
+    notify('ui/notifications/size-changed', {
+      width: document.documentElement.scrollWidth,
+      height: document.documentElement.scrollHeight
+    });
+  }
+
+  request('ui/initialize', {
+    protocolVersion: '2026-01-26',
+    appInfo: { name: 'truenas-inventory', version: '1' },
+    appCapabilities: {}
+  }).then(function (result) {
+    if (result && result.hostContext) applyContext(result.hostContext);
+    notify('ui/notifications/initialized');
+  }).catch(function (err) {
+    setStatus('Host refused initialization: ' + err.message);
+  });
+
+  // ---- Rendering. ----
+  var state = { data: null, filter: '' };
+
+  var el = function (id) { return document.getElementById(id); };
+  function setStatus(text) { el('status').textContent = text; }
+  function setBusy(busy) { el('refresh').disabled = busy; }
+
+  function renderResult(result) {
+    var data = result.structuredContent;
+    if (!data && result.content && result.content.length) {
+      // A host may deliver only text; the tool's text is its structured
+      // result serialised, so it can be read back.
+      try { data = JSON.parse(result.content[0].text); } catch (e) { data = null; }
+    }
+    if (result.isError || !data) {
+      var msg = (result.content && result.content[0] && result.content[0].text) || 'no result';
+      setStatus('Inventory failed: ' + msg);
+      return;
+    }
+    state.data = data;
+    render();
+  }
+
+  function bytes(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '—';
+    var units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+    var i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? n : n.toFixed(n >= 100 ? 0 : 1)) + ' ' + units[i];
+  }
+
+  function matches(name) {
+    return !state.filter || String(name || '').toLowerCase().indexOf(state.filter) >= 0;
+  }
+
+  function h(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'class') node.className = attrs[k];
+      else if (k === 'text') node.textContent = attrs[k];
+      else node.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+    return node;
+  }
+
+  function table(columns, rows) {
+    var thead = h('thead', {}, [h('tr', {}, columns.map(function (c) { return h('th', { text: c.label }); }))]);
+    var tbody = h('tbody', {}, rows.map(function (r) {
+      return h('tr', {}, columns.map(function (c) { return c.cell(r); }));
+    }));
+    return h('table', {}, [thead, tbody]);
+  }
+
+  function text(v, cls) { return h('td', { text: v == null ? '' : String(v), class: cls || '' }); }
+  function num(v) { return h('td', { class: 'num', text: v == null ? '' : String(v) }); }
+
+  function section(title, items, error, columns, keyOf, note) {
+    var shown = (items || []).filter(function (it) { return matches(keyOf(it)); });
+    var body;
+    if (error) body = h('div', { class: 'err', text: 'Unavailable: ' + error });
+    else if (!items || !items.length) body = h('div', { class: 'empty', text: 'None.' });
+    else if (!shown.length) body = h('div', { class: 'empty', text: 'No match.' });
+    else body = table(columns, shown);
+    var head = title + (items && items.length ? ' (' + shown.length + (shown.length !== items.length ? ' of ' + items.length : '') + ')' : '');
+    return h('section', { 'data-section': title.toLowerCase() }, [
+      h('h2', { text: head }), body,
+      note ? h('div', { class: 'status', text: note }) : null
+    ]);
+  }
+
+  function capacity(p) {
+    var used = p.allocated, size = p.size;
+    var pct = size ? Math.round(100 * used / size) : 0;
+    var cls = pct >= 90 ? 'bad' : pct >= 80 ? 'warn' : '';
+    return h('td', {}, [
+      h('div', { class: 'bar ' + cls, title: pct + '% used' }, [h('i', { style: 'width:' + pct + '%' })]),
+      h('div', { class: 'status', text: bytes(used) + ' of ' + bytes(size) + ' (' + pct + '%)' })
+    ]);
+  }
+
+  function stateCell(s, goodValues) {
+    var v = String(s || '');
+    var cls = goodValues.indexOf(v) >= 0 ? 'ok' : v ? 'warn' : '';
+    return text(v, cls);
+  }
+
+  function render() {
+    var d = state.data;
+    var errors = d.errors || {};
+    el('view').classList.remove('hidden');
+
+    var host = d.host || {};
+    el('title').textContent = host.hostname ? host.hostname + ' inventory' : 'TrueNAS inventory';
+    el('subtitle').textContent = [host.version, host.uptime ? 'up ' + host.uptime : ''].filter(Boolean).join(' · ');
+    setStatus(d.generated_at ? 'As of ' + d.generated_at : '');
+
+    var tiles = el('tiles');
+    tiles.textContent = '';
+    [['pools', 'Pools'], ['datasets', 'Datasets'], ['apps', 'Apps'], ['vms', 'VMs'],
+     ['containers', 'Containers'], ['shares', 'Shares'], ['alerts', 'Alerts']].forEach(function (t) {
+      var n = errors[t[0]] ? '—' : (d[t[0]] || []).length;
+      tiles.appendChild(h('div', { class: 'tile', 'data-tile': t[0] }, [
+        h('div', { class: 'n', text: n }), h('div', { class: 'l', text: t[1] })]));
+    });
+
+    var s = el('sections');
+    s.textContent = '';
+    s.appendChild(section('Alerts', d.alerts, errors.alerts, [
+      { label: 'Level', cell: function (a) { return text(a.level, a.level === 'CRITICAL' || a.level === 'ERROR' ? 'bad' : a.level === 'WARNING' ? 'warn' : ''); } },
+      { label: 'Message', cell: function (a) { return text(a.message); } },
+      { label: 'Since', cell: function (a) { return text(a.since); } }
+    ], function (a) { return a.message; }));
+
+    s.appendChild(section('Pools', d.pools, errors.pools, [
+      { label: 'Name', cell: function (p) { return text(p.name); } },
+      { label: 'Status', cell: function (p) { return stateCell(p.status, ['ONLINE']); } },
+      { label: 'Capacity', cell: capacity },
+      { label: 'Free', cell: function (p) { return num(bytes(p.free)); } }
+    ], function (p) { return p.name; }));
+
+    s.appendChild(section('Datasets', d.datasets, errors.datasets, [
+      { label: 'Name', cell: function (x) { return text(x.name); } },
+      { label: 'Type', cell: function (x) { return text(x.type); } },
+      { label: 'Used', cell: function (x) { return num(bytes(x.used)); } },
+      { label: 'Available', cell: function (x) { return num(bytes(x.available)); } }
+    ], function (x) { return x.name; }, d.datasets_truncated ? 'Showing the first ' + d.datasets.length + ' datasets; call storage(op="list_datasets") for the rest.' : ''));
+
+    s.appendChild(section('Apps', d.apps, errors.apps, [
+      { label: 'Name', cell: function (a) { return text(a.name); } },
+      { label: 'State', cell: function (a) { return stateCell(a.state, ['RUNNING']); } },
+      { label: 'Version', cell: function (a) { return text(a.version); } },
+      { label: 'Updates', cell: function (a) {
+          var parts = [];
+          if (a.upgrade_available) parts.push('app upgrade');
+          if (a.image_updates_available) parts.push('image updates');
+          return text(parts.join(', '), parts.length ? 'warn' : '');
+        } }
+    ], function (a) { return a.name; }));
+
+    s.appendChild(section('VMs', d.vms, errors.vms, [
+      { label: 'Name', cell: function (v) { return text(v.name); } },
+      { label: 'State', cell: function (v) { return stateCell(v.state, ['RUNNING']); } },
+      { label: 'vCPUs', cell: function (v) { return num(v.vcpus); } },
+      { label: 'Memory', cell: function (v) { return num(v.memory_mib ? v.memory_mib + ' MiB' : ''); } }
+    ], function (v) { return v.name; }));
+
+    s.appendChild(section('Containers', d.containers, errors.containers, [
+      { label: 'Name', cell: function (c) { return text(c.name); } },
+      { label: 'State', cell: function (c) { return stateCell(c.state, ['RUNNING']); } }
+    ], function (c) { return c.name; }));
+
+    s.appendChild(section('Shares', d.shares, errors.shares, [
+      { label: 'Kind', cell: function (x) { return text(x.kind); } },
+      { label: 'Name', cell: function (x) { return text(x.name); } },
+      { label: 'Path', cell: function (x) { return text(x.path); } },
+      { label: 'Enabled', cell: function (x) { return text(x.enabled ? 'yes' : 'no', x.enabled ? '' : 'warn'); } }
+    ], function (x) { return (x.name || '') + ' ' + (x.path || ''); }));
+
+    reportSize();
+  }
+
+  el('filter').addEventListener('input', function (ev) {
+    state.filter = ev.target.value.trim().toLowerCase();
+    if (state.data) render();
+  });
+
+  el('refresh').addEventListener('click', function () {
+    setBusy(true);
+    setStatus('Refreshing…');
+    request('tools/call', { name: 'inventory', arguments: {} })
+      .then(renderResult)
+      .catch(function (err) { setStatus('Refresh failed: ' + err.message); })
+      .then(function () { setBusy(false); });
+  });
+})();
+</script>
+</body>
+</html>

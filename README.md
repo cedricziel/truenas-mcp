@@ -273,6 +273,7 @@ was always an enhancement over it, and MCP client support for it is thin.
 | `search_methods`  | find middleware methods by name                                                                                                                |
 | `describe_method` | a method's arguments, summarised                                                                                                               |
 | `call_method`     | invoke a method directly                                                                                                                       |
+| `inventory`       | one-call summary of the whole box; renders as an MCP App                                                                                        |
 | `server_info`     | —                                                                                                                                              |
 | `system_info`     | —                                                                                                                                              |
 
@@ -412,6 +413,61 @@ the design — they teach the filter syntax and ZFS semantics once instead of
 repeating them in every tool description, where the tokens would be paid on
 every request. A test asserts tool descriptions do not restate them.
 
+### MCP Apps
+
+An [MCP App](https://github.com/modelcontextprotocol/ext-apps) is a tool whose
+result a host can render as an interactive view instead of text. The tool
+carries `_meta.ui.resourceUri` naming a `ui://` resource, that resource is a
+self-contained HTML document served as `text/html;profile=mcp-app`, and the
+host loads it in a sandboxed iframe and talks to it over postMessage. A host
+without the extension ignores the metadata and gets the ordinary structured
+result, so an app costs a plain client nothing.
+
+| App        | Tool        | Resource                  | Shows                                                                                  |
+| ---------- | ----------- | ------------------------- | -------------------------------------------------------------------------------------- |
+| Inventory  | `inventory` | `ui://truenas/inventory`  | pools with capacity, datasets, apps, VMs, containers, shares, alerts; filter, refresh |
+
+Every app is inline: no external script, stylesheet, image, or connection.
+The default policy a host applies to an app that declares no CSP forbids all
+of those, and declaring domains would trade the sandbox for a dependency on a
+CDN being reachable from wherever the host runs. A test refuses any app that
+references one.
+
+`inventory` fetches each section independently and reports each
+independently. An API key that may read pools but not apps still gets its
+pools, with the refusal named under `errors.apps`, rather than the whole call
+failing on the first section the key cannot see. The call fails only when no
+section at all could be read.
+
+The registry lives in `internal/apps`; adding an app is one entry there plus
+the tool it names. Its Go tests hold every entry to the extension's
+conventions, and `make test-apps` runs the views themselves against a fake
+host in a real browser.
+
+### MCP Tasks
+
+Every mutating tool starts a middleware job and returns its id. The
+[Tasks extension](https://github.com/modelcontextprotocol/ext-tasks)
+(`io.modelcontextprotocol/tasks`, stable as of protocol 2026-07-28) is the
+protocol's own shape for exactly that, so a job is exposed as a task rather
+than through a second lifecycle.
+
+A client that declares the extension in the capabilities it sends with each
+request receives, in place of a write tool's ordinary result, a
+`CreateTaskResult` with a task id. It polls `tasks/get`, which reports the
+job's state and progress and, once terminal, the result the tool would have
+produced synchronously: `completed` carries the job's return value, `failed`
+carries its error, and an aborted job reads as `cancelled`. `tasks/cancel`
+asks the target to abort the job. A client that does not declare the
+extension gets the job-started result it always did, and `jobs` follows a job
+either way.
+
+Task ids are minted per server, and a server is built per credential, so a
+task is reachable only under the credential that started it. The mapping is
+held in memory: after a restart a task id is unknown and `tasks/get` says so.
+The extension is advertised only when the write tier is enabled, since a
+read-only server never starts a job.
+
 ## Releases
 
 Releasing runs through [release-please](https://github.com/googleapis/release-please)
@@ -443,8 +499,9 @@ release tag would not start the publish job.
 ## Development
 
 ```bash
-make test     # unit tests
-make lint     # go vet + golangci-lint
+make test       # unit tests
+make test-apps  # browser tests for the MCP Apps; needs Node 22
+make lint       # go vet + golangci-lint
 make build
 make image
 ```

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cedricziel/truenas-mcp/internal/apps"
 	"github.com/cedricziel/truenas-mcp/internal/oauth"
 	"github.com/cedricziel/truenas-mcp/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -113,10 +114,20 @@ repeat, including the middleware's query filter syntax.`
 // by cfg. Tools are registered only when their tier is enabled, so the tool
 // list is itself the policy: a disabled tier has no tool to call.
 func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
+	capabilities := &mcp.ServerCapabilities{}
+	capabilities.AddExtension(apps.ExtensionID, nil)
+	// Tasks exist only where jobs can be started: see registerTasks.
+	if cfg.EnableWrites && session != nil {
+		capabilities.AddExtension(TasksExtensionID, nil)
+	}
+
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "truenas-mcp",
 		Version: cfg.Version,
 	}, &mcp.ServerOptions{
+		// Extensions are declared here; everything else -- tools, resources
+		// -- is inferred from what gets registered, exactly as before.
+		Capabilities: capabilities,
 		// Instructions do not vary with the configured tier. Saying "mutations
 		// are registered only when enabled" is true and useful in both
 		// postures; describing the surface differently depending on how the
@@ -126,6 +137,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 	})
 
 	registerResources(srv, session)
+	registerApps(srv, session)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "server_info",
@@ -153,6 +165,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		if cfg.EnableWrites {
 			registerWrites(srv, session)
 			registerConfigWrites(srv, session)
+			registerTasks(srv, session, newTaskRegistry())
 		}
 
 		mcp.AddTool(srv, &mcp.Tool{

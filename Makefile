@@ -3,7 +3,7 @@ PKG     := github.com/cedricziel/truenas-mcp
 VERSION ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 IMAGE   ?= ghcr.io/cedricziel/truenas-mcp
 
-.PHONY: all build test lint format tidy image clean
+.PHONY: all build test test-apps lint format tidy image clean
 
 all: format lint test build
 
@@ -12,6 +12,11 @@ build:
 
 test:
 	go test ./...
+
+# Browser tests for the embedded MCP Apps. Needs Node and a Playwright
+# Chromium; the Go build and `make test` do not.
+test-apps:
+	cd internal/apps/ui && npm ci && npx playwright install chromium && npm test
 
 # Integration tests need a live TrueNAS target and are excluded from `make test`.
 test-integration:
