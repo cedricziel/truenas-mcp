@@ -188,15 +188,6 @@ func TestInventoryBoundsDatasets(t *testing.T) {
 	}
 }
 
-func itoa(i int) string {
-	return strings.TrimSpace(strings.Repeat(" ", 0) + json.Number(fmtInt(i)).String())
-}
-
-func fmtInt(i int) string {
-	b, _ := json.Marshal(i)
-	return string(b)
-}
-
 // A key that may read storage but not apps still gets its storage, with the
 // refusal named against the section it belongs to.
 func TestInventoryReportsRefusedSectionsWithoutFailing(t *testing.T) {
