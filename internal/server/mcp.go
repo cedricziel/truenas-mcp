@@ -126,6 +126,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 	})
 
 	registerResources(srv, session)
+	registerApps(srv, session)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "server_info",

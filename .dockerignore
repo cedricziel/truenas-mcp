@@ -3,3 +3,8 @@
 openspec
 dist
 *.md
+node_modules
+internal/apps/ui/test
+internal/apps/ui/package.json
+internal/apps/ui/package-lock.json
+internal/apps/ui/playwright.config.mjs

@@ -1,0 +1,12 @@
+{
+  "name": "truenas-mcp-apps",
+  "private": true,
+  "description": "Browser tests for the MCP Apps this server embeds. The Go build does not need this directory; it exists so the views can be exercised against a fake host.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

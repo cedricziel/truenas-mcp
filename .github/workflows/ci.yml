@@ -38,10 +38,29 @@ jobs:
 
       - run: go test -race ./...
 
+  # The MCP Apps are HTML documents embedded in the binary. Their Go tests
+  # cover the protocol surface; this exercises the views themselves against a
+  # fake host in a real browser.
+  apps:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: internal/apps/ui
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: internal/apps/ui/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+
   # Publishes the moving `main` tag only. Versioned releases are cut by
   # release-please.yml, which is the single path to a release.
   publish:
-    needs: test
+    needs: [test, apps]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

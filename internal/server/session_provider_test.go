@@ -29,7 +29,15 @@ type fakeTarget struct {
 	mu        sync.Mutex
 	responses map[string]json.RawMessage
 	handlers  map[string]func(params json.RawMessage) any
+	failures  map[string]fakeFailure
 	calls     []capturedCall
+}
+
+// fakeFailure is a JSON-RPC error the fake target returns for a method, so a
+// test can exercise how the server reports a refusal the target itself made.
+type fakeFailure struct {
+	code    int
+	message string
 }
 
 // capturedCall is one request the fake target received, kept so a test can
@@ -70,9 +78,18 @@ func newFakeTarget(t *testing.T) *fakeTarget {
 				JSONRPC string          `json:"jsonrpc"`
 				ID      uint64          `json:"id"`
 				Result  json.RawMessage `json:"result,omitempty"`
+				Error   *struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
 			}{JSONRPC: "2.0", ID: req.ID}
 
-			if handler, ok := f.handler(req.Method); ok {
+			if failure, ok := f.failure(req.Method); ok {
+				resp.Error = &struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				}{Code: failure.code, Message: failure.message}
+			} else if handler, ok := f.handler(req.Method); ok {
 				resp.Result, _ = json.Marshal(handler(req.Params))
 			} else if custom, ok := f.customResponse(req.Method); ok {
 				resp.Result = custom
@@ -133,6 +150,25 @@ func (f *fakeTarget) respondFunc(method string, fn func(params json.RawMessage) 
 		f.handlers = map[string]func(params json.RawMessage) any{}
 	}
 	f.handlers[method] = fn
+}
+
+// fail makes the target answer method with a JSON-RPC error. Code -32001 is
+// what the middleware returns for a call the caller's key is not privileged
+// for; see internal/truenas/errors.go.
+func (f *fakeTarget) fail(method string, code int, message string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failures == nil {
+		f.failures = map[string]fakeFailure{}
+	}
+	f.failures[method] = fakeFailure{code: code, message: message}
+}
+
+func (f *fakeTarget) failure(method string) (fakeFailure, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	failure, ok := f.failures[method]
+	return failure, ok
 }
 
 func (f *fakeTarget) handler(method string) (func(params json.RawMessage) any, bool) {
