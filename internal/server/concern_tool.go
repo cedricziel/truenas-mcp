@@ -130,6 +130,9 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 		if c.Name == "apps" && op.Name == "logs" {
 			return appLogs(ctx, s.Client(), in)
 		}
+		if c.Name == "filesystem" && op.Name == "read" {
+			return readFile(ctx, s.Client(), in)
+		}
 
 		params := middlewareParams(op, in)
 		raw, err := s.Client().Call(ctx, op.Method, params...)

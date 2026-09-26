@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+// dispatcherHandled are the ops with no Method, which server.registerConcern
+// routes to their own handler.
+var dispatcherHandled = map[string]bool{
+	"apps.logs":       true,
+	"filesystem.read": true,
+}
+
 func TestConcernsAreWellFormed(t *testing.T) {
 	for _, c := range ReadConcerns() {
 		t.Run(c.Name, func(t *testing.T) {
@@ -26,7 +33,7 @@ func TestConcernsAreWellFormed(t *testing.T) {
 				if op.Summary == "" {
 					t.Errorf("operation %q needs a summary: it is what a model selects on", op.Name)
 				}
-				if op.Method == "" && (c.Name != "apps" || op.Name != "logs") {
+				if op.Method == "" && !dispatcherHandled[c.Name+"."+op.Name] {
 					t.Errorf("operation %q has no middleware method", op.Name)
 				}
 
