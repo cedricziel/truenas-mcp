@@ -50,6 +50,7 @@ func (f *fakeTarget) serveDownload(status int, body string) {
 	f.download = fakeDownload{status: status, body: body}
 	f.mu.Unlock()
 	f.respond("core.download", []any{9, fakeDownloadPath + "?auth_token=one-time"})
+	f.respond("core.get_jobs", []any{map[string]any{"id": 9, "method": "filesystem.get", "state": "SUCCESS"}})
 }
 
 // fakeFailure is a JSON-RPC error the fake target returns for a method, so a

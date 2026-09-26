@@ -26,7 +26,28 @@ func serveDownload(t *testing.T, f *fakeMiddleware, status int, body string) *js
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	})
+	finishJob(f, "SUCCESS", "")
 	return &seen
+}
+
+func finishJob(f *fakeMiddleware, state, jobErr string) {
+	f.handle("core.get_jobs", func(json.RawMessage) (any, *rpcError) {
+		return []any{map[string]any{"id": 7, "method": "filesystem.get", "state": state, "error": jobErr}}, nil
+	})
+}
+
+// Verified live: a job that fails before writing anything can still be served
+// as 200 with an empty body, so only the job's state tells the two apart.
+func TestDownloadReportsAJobThatFailedBehindAnEmptySuccess(t *testing.T) {
+	f := newFakeMiddleware(t)
+	serveDownload(t, f, http.StatusOK, "")
+	finishJob(f, "FAILED", "[EFAULT] /etc is not a file")
+
+	c := dial(t, f)
+	_, err := c.Download(context.Background(), "filesystem.get", []any{"/etc"}, "etc", 1024)
+	if err == nil || !strings.Contains(err.Error(), "/etc is not a file") {
+		t.Fatalf("want the job's error, got %v", err)
+	}
 }
 
 func TestDownloadReturnsTheJobsOutput(t *testing.T) {
