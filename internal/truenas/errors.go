@@ -46,27 +46,29 @@ type CallError struct {
 	Method  string
 	Code    int
 	Message string
+	// Errname and Reason come from the error's data. The middleware answers
+	// every failed call with the same code and message, so these are the
+	// only fields that say what actually went wrong.
+	Errname string
+	Reason  string
 	Data    any
 }
 
 func (e *CallError) Error() string {
-	return fmt.Sprintf("%s: target reported error %d: %s", e.Method, e.Code, e.Message)
+	if e.Reason == "" {
+		return fmt.Sprintf("%s: target reported error %d: %s", e.Method, e.Code, e.Message)
+	}
+	return fmt.Sprintf("%s: target reported error %d (%s): %s", e.Method, e.Code, e.Errname, e.Reason)
 }
 
-// Unwrap maps the target's error codes onto the sentinels above so callers can
-// use errors.Is rather than matching on numbers.
+// Unwrap maps the target's errno names onto the sentinels above so callers can
+// use errors.Is rather than matching on strings.
 func (e *CallError) Unwrap() error {
-	switch e.Code {
-	case codeNotAuthenticated:
+	switch e.Errname {
+	case "ENOTAUTHENTICATED":
 		return ErrUnauthenticated
-	case codeAccessDenied:
+	case "EACCES":
 		return ErrUnauthorized
 	}
 	return nil
 }
-
-// JSON-RPC error codes the middleware uses beyond the standard set.
-const (
-	codeNotAuthenticated = -32000
-	codeAccessDenied     = -32001
-)

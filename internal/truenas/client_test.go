@@ -100,12 +100,22 @@ func TestCallReturnsResult(t *testing.T) {
 	}
 }
 
+// callError is the shape the middleware sends for every failed method call:
+// one fixed code and message, with the reason and errno name in data.
+func callError(errname, reason string) *rpcError {
+	return &rpcError{
+		Code:    -32001,
+		Message: "Method call error",
+		Data:    map[string]any{"error": 14, "errname": errname, "reason": reason},
+	}
+}
+
 // A failure the target reported must stay distinguishable from a failure of
 // this server's own gating.
 func TestCallSurfacesTargetError(t *testing.T) {
 	f := newFakeMiddleware(t)
 	f.handle("pool.query", func(json.RawMessage) (any, *rpcError) {
-		return nil, &rpcError{Code: -32001, Message: "Not authorized"}
+		return nil, callError("EACCES", "Not authorized")
 	})
 
 	c := dial(t, f)
@@ -119,7 +129,59 @@ func TestCallSurfacesTargetError(t *testing.T) {
 		t.Errorf("CallError.Method = %q, want pool.query", callErr.Method)
 	}
 	if !errors.Is(err, ErrUnauthorized) {
-		t.Errorf("an access-denied code must map to ErrUnauthorized, got %v", err)
+		t.Errorf("an EACCES refusal must map to ErrUnauthorized, got %v", err)
+	}
+}
+
+// The middleware answers every failure with the same generic message; the
+// reason that tells a caller what went wrong is only in data.
+func TestCallErrorCarriesTheTargetsReason(t *testing.T) {
+	f := newFakeMiddleware(t)
+	f.handle("filesystem.get", func(json.RawMessage) (any, *rpcError) {
+		return nil, callError("EFAULT", "'NoneType' object has no attribute 'w'")
+	})
+
+	c := dial(t, f)
+	_, err := c.Call(context.Background(), "filesystem.get", "/etc/hostname")
+
+	if !strings.Contains(err.Error(), "'NoneType' object has no attribute 'w'") {
+		t.Errorf("error should carry the target's reason, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "EFAULT") {
+		t.Errorf("error should name the errno, got: %v", err)
+	}
+	if errors.Is(err, ErrUnauthorized) {
+		t.Errorf("a failure that is not EACCES must not read as a privilege problem: %v", err)
+	}
+}
+
+func TestCallMapsNotAuthenticated(t *testing.T) {
+	f := newFakeMiddleware(t)
+	f.handle("pool.query", func(json.RawMessage) (any, *rpcError) {
+		return nil, callError("ENOTAUTHENTICATED", "Not authenticated")
+	})
+
+	c := dial(t, f)
+	_, err := c.Call(context.Background(), "pool.query")
+	if !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("want ErrUnauthenticated, got %v", err)
+	}
+}
+
+// -32000 is the middleware's concurrency limit, not an auth failure.
+func TestTooManyConcurrentCallsIsNotAnAuthFailure(t *testing.T) {
+	f := newFakeMiddleware(t)
+	f.handle("pool.query", func(json.RawMessage) (any, *rpcError) {
+		return nil, &rpcError{Code: -32000, Message: "Maximum number of concurrent calls (20) has exceeded"}
+	})
+
+	c := dial(t, f)
+	_, err := c.Call(context.Background(), "pool.query")
+	if errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("a concurrency limit must not read as a rejected credential: %v", err)
+	}
+	if !strings.Contains(err.Error(), "concurrent calls") {
+		t.Errorf("error should carry the message when there is no data, got: %v", err)
 	}
 }
 

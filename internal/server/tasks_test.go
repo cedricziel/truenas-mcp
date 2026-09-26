@@ -392,7 +392,7 @@ func TestCancelAsksTheTargetToAbortTheJob(t *testing.T) {
 
 	// A job already finished cannot be aborted; the target's refusal is not
 	// the cancel request failing.
-	target.fail("core.job_abort", -32001, "job is not running")
+	target.fail("core.job_abort", "EINVAL", "job is not running")
 	if _, wireErr := s.task(methodTaskCancel, id); wireErr != nil {
 		t.Errorf("cancel after the job finished should still be acknowledged: %v", wireErr)
 	}

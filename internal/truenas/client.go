@@ -425,9 +425,13 @@ func (c *Client) Login(ctx context.Context, apiKey string) error {
 
 // classify maps a target-reported error onto the sentinels callers match on.
 // Rate limiting arrives as a generic auth error distinguished only by its
-// message, so it is detected before the code-based mapping in CallError.
+// message, so it is detected before the errno-based mapping in CallError.
 func classify(method string, e *rpcError) error {
 	callErr := &CallError{Method: method, Code: e.Code, Message: e.Message, Data: e.Data}
+	if data, ok := e.Data.(map[string]any); ok {
+		callErr.Errname, _ = data["errname"].(string)
+		callErr.Reason, _ = data["reason"].(string)
+	}
 
 	if strings.Contains(strings.ToLower(e.Message), "rate limit") {
 		return fmt.Errorf("%w: %w", ErrRateLimited, callErr)

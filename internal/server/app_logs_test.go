@@ -54,7 +54,7 @@ func newLogTarget(t *testing.T) *logTarget {
 			result, refusal, source := target.handle(req.Method, req.Params)
 			response := map[string]any{"jsonrpc": "2.0", "id": req.ID}
 			if refusal != "" {
-				response["error"] = map[string]any{"code": -32001, "message": refusal}
+				response["error"] = map[string]any{"code": -32001, "message": "Method call error", "data": map[string]any{"errname": "EINVAL", "reason": refusal}}
 			} else {
 				response["result"] = result
 			}
