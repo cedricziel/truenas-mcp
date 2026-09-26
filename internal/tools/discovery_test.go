@@ -45,6 +45,25 @@ func TestMutatingMethodsNeedWritesEnabled(t *testing.T) {
 	}
 }
 
+// A method that streams through a pipe fails on every plain call: the pipe is
+// only created by core.download or an upload, and neither path goes through
+// call_method.
+func TestPipeMethodsAreRefused(t *testing.T) {
+	get := MethodInfo{Name: "filesystem.get", Roles: []string{"FULL_ADMIN"}, Job: true, Pipe: true}
+	put := MethodInfo{Name: "filesystem.put", Roles: []string{"FULL_ADMIN"}, Job: true, Pipe: true}
+
+	for _, m := range []MethodInfo{get, put} {
+		err := CheckDiscoverable(m, true)
+		if err == nil {
+			t.Errorf("%s needs a pipe and must not be callable through discovery", m.Name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "pipe") {
+			t.Errorf("the refusal should say why: %v", err)
+		}
+	}
+}
+
 // A method that declares no roles has no privilege check at all. On this
 // target those are mostly session and protocol plumbing -- login, subscribe,
 // abort, bulk execution -- not harmless reads. Treating "no roles" as "no

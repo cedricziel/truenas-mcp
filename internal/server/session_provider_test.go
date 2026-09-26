@@ -36,8 +36,8 @@ type fakeTarget struct {
 // fakeFailure is a JSON-RPC error the fake target returns for a method, so a
 // test can exercise how the server reports a refusal the target itself made.
 type fakeFailure struct {
-	code    int
-	message string
+	errname string
+	reason  string
 }
 
 // capturedCall is one request the fake target received, kept so a test can
@@ -79,16 +79,22 @@ func newFakeTarget(t *testing.T) *fakeTarget {
 				ID      uint64          `json:"id"`
 				Result  json.RawMessage `json:"result,omitempty"`
 				Error   *struct {
-					Code    int    `json:"code"`
-					Message string `json:"message"`
+					Code    int            `json:"code"`
+					Message string         `json:"message"`
+					Data    map[string]any `json:"data"`
 				} `json:"error,omitempty"`
 			}{JSONRPC: "2.0", ID: req.ID}
 
 			if failure, ok := f.failure(req.Method); ok {
 				resp.Error = &struct {
-					Code    int    `json:"code"`
-					Message string `json:"message"`
-				}{Code: failure.code, Message: failure.message}
+					Code    int            `json:"code"`
+					Message string         `json:"message"`
+					Data    map[string]any `json:"data"`
+				}{
+					Code:    -32001,
+					Message: "Method call error",
+					Data:    map[string]any{"errname": failure.errname, "reason": failure.reason},
+				}
 			} else if handler, ok := f.handler(req.Method); ok {
 				resp.Result, _ = json.Marshal(handler(req.Params))
 			} else if custom, ok := f.customResponse(req.Method); ok {
@@ -152,16 +158,16 @@ func (f *fakeTarget) respondFunc(method string, fn func(params json.RawMessage) 
 	f.handlers[method] = fn
 }
 
-// fail makes the target answer method with a JSON-RPC error. Code -32001 is
-// what the middleware returns for a call the caller's key is not privileged
-// for; see internal/truenas/errors.go.
-func (f *fakeTarget) fail(method string, code int, message string) {
+// fail makes the target answer method with a failed-call error, the way the
+// middleware does: errname EACCES is a call the caller's key is not
+// privileged for; see internal/truenas/errors.go.
+func (f *fakeTarget) fail(method, errname, reason string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failures == nil {
 		f.failures = map[string]fakeFailure{}
 	}
-	f.failures[method] = fakeFailure{code: code, message: message}
+	f.failures[method] = fakeFailure{errname: errname, reason: reason}
 }
 
 func (f *fakeTarget) failure(method string) (fakeFailure, bool) {

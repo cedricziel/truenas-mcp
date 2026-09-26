@@ -192,8 +192,8 @@ func TestInventoryBoundsDatasets(t *testing.T) {
 // refusal named against the section it belongs to.
 func TestInventoryReportsRefusedSectionsWithoutFailing(t *testing.T) {
 	target := newInventoryTarget(t)
-	target.fail("app.query", -32001, "Not authorized")
-	target.fail("sharing.nfs.query", -32001, "Not authorized")
+	target.fail("app.query", "EACCES", "Not authorized")
+	target.fail("sharing.nfs.query", "EACCES", "Not authorized")
 
 	out := callInventory(t, target)
 
@@ -223,7 +223,7 @@ func TestInventoryReportsRefusedSectionsWithoutFailing(t *testing.T) {
 func TestInventoryFailsOnlyWhenNothingCanBeRead(t *testing.T) {
 	target := newFakeTarget(t)
 	for _, s := range inventorySections() {
-		target.fail(s.method, -32001, "Not authorized")
+		target.fail(s.method, "EACCES", "Not authorized")
 	}
 
 	client := discoveryClient(t, discoverySession(t, target), false)

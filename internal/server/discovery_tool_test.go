@@ -144,6 +144,39 @@ func TestCallMethodComposesCaveatWithJobNote(t *testing.T) {
 	}
 }
 
+// The target flags a pipe-streaming job as downloadable; call_method must
+// refuse it rather than forward a call that can only fail.
+func TestCallMethodRefusesDownloadableMethod(t *testing.T) {
+	target := newFakeTarget(t)
+	target.respond("core.get_methods", map[string]any{
+		"filesystem.get": map[string]any{
+			"description":  "Job to get contents of `path`.",
+			"job":          true,
+			"downloadable": true,
+			"roles":        []string{"FULL_ADMIN"},
+			"accepts":      []map[string]any{{"_name_": "path", "_required_": true, "type": "string"}},
+		},
+	})
+	client := discoveryClient(t, discoverySession(t, target), true)
+
+	res, err := client.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "call_method",
+		Arguments: map[string]any{"method": "filesystem.get", "params": []any{"/etc/hostname"}},
+	})
+	if err != nil {
+		t.Fatalf("call call_method: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("a downloadable method must be refused")
+	}
+	if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, "pipe") {
+		t.Errorf("refusal should say why, got: %s", text)
+	}
+	if _, called := target.lastParams("filesystem.get"); called {
+		t.Error("the refused method must never reach the target")
+	}
+}
+
 // A method with no established caveat must not grow a field for one: an
 // absent key is the honest signal that nothing has been established, whereas
 // an empty string next to a populated one on another method invites a caller
