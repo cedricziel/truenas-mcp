@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // Download is what a streaming job produced, up to the caller's limit.
@@ -30,8 +31,10 @@ func (c *Client) Download(ctx context.Context, method string, args []any, filena
 	}
 
 	var answer []json.RawMessage
+	var jobID int64
 	var path string
-	if err := json.Unmarshal(raw, &answer); err != nil || len(answer) != 2 || json.Unmarshal(answer[1], &path) != nil {
+	if err := json.Unmarshal(raw, &answer); err != nil || len(answer) != 2 ||
+		json.Unmarshal(answer[0], &jobID) != nil || json.Unmarshal(answer[1], &path) != nil {
 		return Download{}, fmt.Errorf("%s: unexpected core.download answer: %s", method, raw)
 	}
 
@@ -67,7 +70,47 @@ func (c *Client) Download(ctx context.Context, method string, args []any, filena
 	if int64(len(data)) > max {
 		return Download{Data: data[:max], Truncated: true}, nil
 	}
+	if err := c.awaitDownloadJob(ctx, method, jobID); err != nil {
+		return Download{}, err
+	}
 	return Download{Data: data}, nil
+}
+
+const (
+	downloadJobWait = 5 * time.Second
+	downloadJobPoll = 100 * time.Millisecond
+)
+
+// awaitDownloadJob reports a failed job behind a complete download. A job
+// that fails before writing anything can still be served as 200 with an empty
+// body, so the status code alone does not prove it succeeded. A job still
+// running after downloadJobWait is given the benefit of the doubt: its output
+// has already ended.
+func (c *Client) awaitDownloadJob(ctx context.Context, method string, id int64) error {
+	ctx, cancel := context.WithTimeout(ctx, downloadJobWait)
+	defer cancel()
+
+	for {
+		job, err := c.Job(ctx, id)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if job.Failed() {
+			return fmt.Errorf("%s: target reported: %s", method, job.Error)
+		}
+		if job.Done() {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(downloadJobPoll):
+		}
+	}
 }
 
 // httpBaseURL turns the middleware's WebSocket endpoint into the plain HTTP
