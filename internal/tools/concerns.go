@@ -413,6 +413,15 @@ func Filesystem() *Concern {
 				Name: "acl", Summary: "who may access a path",
 				Method: "filesystem.getacl", Args: []string{"path"}, Required: []string{"path"},
 			},
+			// filesystem.get streams through a download pipe rather than
+			// answering the call, so the dispatcher runs it through
+			// core.download. It requires FULL_ADMIN on the target, unlike
+			// every other op here, though it changes nothing.
+			{
+				Name:    "read",
+				Summary: "the text of one file, cut off at 64 KiB; needs a full-admin API key",
+				Args:    []string{"path"}, Required: []string{"path"},
+			},
 		},
 	}
 }

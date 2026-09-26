@@ -56,6 +56,9 @@ func TestReadConcernsOnlyUseReadOnlyMethods(t *testing.T) {
 
 	for _, concern := range ReadConcerns() {
 		for _, op := range concern.Ops {
+			if dispatcherHandled[concern.Name+"."+op.Name] {
+				continue
+			}
 			meta, ok := methods[op.Method]
 			if !ok {
 				t.Errorf("%s.%s: method %q does not exist on the target",

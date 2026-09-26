@@ -29,6 +29,8 @@ type fakeMiddleware struct {
 	requests  []rpcRequest
 	conn      *websocket.Conn
 	writeMu   sync.Mutex
+	// downloads serves plain HTTP on the paths core.download hands out.
+	downloads map[string]http.HandlerFunc
 }
 
 func newFakeMiddleware(t *testing.T) *fakeMiddleware {
@@ -38,6 +40,14 @@ func newFakeMiddleware(t *testing.T) *fakeMiddleware {
 
 	upgrader := websocket.Upgrader{}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		download := f.downloads[r.URL.Path]
+		f.mu.Unlock()
+		if download != nil {
+			download(w, r)
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -105,6 +115,15 @@ func (f *fakeMiddleware) handle(method string, h func(json.RawMessage) (any, *rp
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.handlers[method] = h
+}
+
+func (f *fakeMiddleware) handleDownload(path string, h http.HandlerFunc) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.downloads == nil {
+		f.downloads = map[string]http.HandlerFunc{}
+	}
+	f.downloads[path] = h
 }
 
 func (f *fakeMiddleware) setDropAfter(n int) {

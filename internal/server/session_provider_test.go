@@ -31,6 +31,25 @@ type fakeTarget struct {
 	handlers  map[string]func(params json.RawMessage) any
 	failures  map[string]fakeFailure
 	calls     []capturedCall
+	download  fakeDownload
+}
+
+// fakeDownload is what the fake serves on the one URL its core.download
+// hands out.
+type fakeDownload struct {
+	status int
+	body   string
+}
+
+const fakeDownloadPath = "/_download/9"
+
+// serveDownload makes core.download succeed and the URL it returns answer
+// with status and body, the way the middleware streams a job's output.
+func (f *fakeTarget) serveDownload(status int, body string) {
+	f.mu.Lock()
+	f.download = fakeDownload{status: status, body: body}
+	f.mu.Unlock()
+	f.respond("core.download", []any{9, fakeDownloadPath + "?auth_token=one-time"})
 }
 
 // fakeFailure is a JSON-RPC error the fake target returns for a method, so a
@@ -56,6 +75,15 @@ func newFakeTarget(t *testing.T) *fakeTarget {
 	f := &fakeTarget{}
 	upgrader := websocket.Upgrader{}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == fakeDownloadPath {
+			f.mu.Lock()
+			d := f.download
+			f.mu.Unlock()
+			w.WriteHeader(d.status)
+			_, _ = w.Write([]byte(d.body))
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return

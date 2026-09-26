@@ -186,3 +186,26 @@ func TestLiveMethodIntrospection(t *testing.T) {
 	t.Logf("%d methods; app.pull_images job=%v; pool.query roles=%v",
 		len(methods), pullImages.Job, poolQuery.Roles)
 }
+
+// The download handshake is this project's reading of the middleware source;
+// only the live box can confirm the URL shape, the token and the 422 path.
+func TestLiveDownloadReadsAFile(t *testing.T) {
+	c := liveClient(t)
+	ctx := context.Background()
+
+	got, err := c.Download(ctx, "filesystem.get", []any{"/etc/hostname"}, "hostname", 4096)
+	if errors.Is(err, ErrUnauthorized) {
+		t.Skip("filesystem.get needs FULL_ADMIN and this key does not have it")
+	}
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	if len(strings.TrimSpace(string(got.Data))) == 0 || got.Truncated {
+		t.Errorf("got %q truncated=%v, want the hostname", got.Data, got.Truncated)
+	}
+
+	_, err = c.Download(ctx, "filesystem.get", []any{"/etc"}, "etc", 4096)
+	if err == nil || !strings.Contains(err.Error(), "not a file") {
+		t.Errorf("a directory should fail with the target's reason, got %v", err)
+	}
+}

@@ -266,14 +266,14 @@ was always an enhancement over it, and MCP client support for it is thin.
 | `sharing`         | `list_smb`, `show_smb`, `smb_acl`, `list_nfs`, `show_nfs`, `list_web`                                                                          |
 | `virtualization`  | `list_vms`, `show_vm`, `vm_devices`, `list_containers`, `show_container`, `container_devices`                                                  |
 | `backup`          | `list_cloud_syncs`, `show_cloud_sync`, `cloud_credentials`, `list_replications`, `show_replication`, `list_rsync_tasks`, `list_snapshot_tasks` |
-| `filesystem`      | `list_directory`, `stat`, `space`, `acl`                                                                                                       |
+| `filesystem`      | `list_directory`, `stat`, `space`, `acl`, `read`                                                                                               |
 | `apps`            | `list`, `show`, `config`, `containers`, `outdated_images`, `upgrade_summary`, `rollback_versions`, `used_ports`                                |
 | `catalog`         | `list`, `categories`, `show`                                                                                                                   |
 | `jobs`            | `list`, `show`                                                                                                                                 |
 | `search_methods`  | find middleware methods by name                                                                                                                |
 | `describe_method` | a method's arguments, summarised                                                                                                               |
 | `call_method`     | invoke a method directly                                                                                                                       |
-| `inventory`       | one-call summary of the whole box; renders as an MCP App                                                                                        |
+| `inventory`       | one-call summary of the whole box; renders as an MCP App                                                                                       |
 | `server_info`     | —                                                                                                                                              |
 | `system_info`     | —                                                                                                                                              |
 
@@ -287,6 +287,13 @@ to click through the prompts that matter.
 Every method behind the read tools is
 verified against the target's own RBAC metadata to grant `READONLY_ADMIN`,
 so "this tool cannot mutate" is checked rather than asserted.
+
+The one exception is `filesystem read`. It returns a file's text, cut off at
+64 KiB and refusing binary files. It changes nothing, but the middleware's
+`filesystem.get` requires `FULL_ADMIN`, so a read-only key gets a clear "not
+permitted". The file streams through `core.download`, which is why
+`call_method` refuses `filesystem.get` and every other method that needs a
+download or upload pipe.
 
 The `apps` operations `outdated_images`, `upgrade_summary`, and
 `rollback_versions` exist so a caller can decide _whether_ to act before the
@@ -423,9 +430,9 @@ host loads it in a sandboxed iframe and talks to it over postMessage. A host
 without the extension ignores the metadata and gets the ordinary structured
 result, so an app costs a plain client nothing.
 
-| App        | Tool        | Resource                  | Shows                                                                                  |
-| ---------- | ----------- | ------------------------- | -------------------------------------------------------------------------------------- |
-| Inventory  | `inventory` | `ui://truenas/inventory`  | pools with capacity, datasets, apps, VMs, containers, shares, alerts; filter, refresh |
+| App       | Tool        | Resource                 | Shows                                                                                 |
+| --------- | ----------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| Inventory | `inventory` | `ui://truenas/inventory` | pools with capacity, datasets, apps, VMs, containers, shares, alerts; filter, refresh |
 
 Every app is inline: no external script, stylesheet, image, or connection.
 The default policy a host applies to an app that declares no CSP forbids all
