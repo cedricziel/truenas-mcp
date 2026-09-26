@@ -27,6 +27,9 @@ type MethodInfo struct {
 	Name  string
 	Roles []string
 	Job   bool
+	// Pipe is set for a job that streams its input or output through a pipe,
+	// which the middleware only creates for core.download or an upload.
+	Pipe bool
 }
 
 // readOnlyRole is the middleware's own marker for a method that does not
@@ -91,6 +94,13 @@ func CheckDiscoverable(m MethodInfo, writesEnabled bool) error {
 	for _, x := range discoveryExclusions {
 		if strings.HasPrefix(m.Name, x.prefix) {
 			return &DiscoveryError{Method: m.Name, Reason: x.reason}
+		}
+	}
+
+	if m.Pipe {
+		return &DiscoveryError{
+			Method: m.Name,
+			Reason: "it streams through a download or upload pipe, which a plain call cannot provide",
 		}
 	}
 

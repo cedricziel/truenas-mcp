@@ -316,10 +316,12 @@ func composeNote(caveat, followUp string) string {
 
 // rawMethodMeta is the introspection payload this server relies on.
 type rawMethodMeta struct {
-	Description string        `json:"description"`
-	Job         bool          `json:"job"`
-	Roles       []string      `json:"roles"`
-	Accepts     []acceptParam `json:"accepts"`
+	Description  string        `json:"description"`
+	Job          bool          `json:"job"`
+	Downloadable bool          `json:"downloadable"`
+	Uploadable   bool          `json:"uploadable"`
+	Roles        []string      `json:"roles"`
+	Accepts      []acceptParam `json:"accepts"`
 }
 
 // acceptParam mirrors one middleware parameter, including the nested fields
@@ -343,7 +345,7 @@ type nestedParam struct {
 
 // info projects the metadata this server gates on.
 func (m rawMethodMeta) info(name string) tools.MethodInfo {
-	return tools.MethodInfo{Name: name, Roles: m.Roles, Job: m.Job}
+	return tools.MethodInfo{Name: name, Roles: m.Roles, Job: m.Job, Pipe: m.Downloadable || m.Uploadable}
 }
 
 func (m rawMethodMeta) readOnly() bool {
