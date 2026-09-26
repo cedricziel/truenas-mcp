@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +68,11 @@ type Options struct {
 type Client struct {
 	conn *websocket.Conn
 
+	// httpBase and http reach the same host over plain HTTP, for the one-time
+	// URLs core.download hands out.
+	httpBase *url.URL
+	http     *http.Client
+
 	writeMu sync.Mutex
 
 	mu      sync.Mutex
@@ -91,9 +98,15 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 		timeout = 15 * time.Second
 	}
 
+	httpBase, err := httpBaseURL(opts.URL)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConfig := &tls.Config{InsecureSkipVerify: opts.InsecureSkipVerify} //nolint:gosec // opt-in, see Options
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: timeout,
-		TLSClientConfig:  &tls.Config{InsecureSkipVerify: opts.InsecureSkipVerify}, //nolint:gosec // opt-in, see Options
+		TLSClientConfig:  tlsConfig,
 	}
 
 	conn, _, err := dialer.DialContext(ctx, opts.URL, nil)
@@ -103,6 +116,8 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 
 	c := &Client{
 		conn:          conn,
+		httpBase:      httpBase,
+		http:          &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}},
 		pending:       map[uint64]chan rpcResponse{},
 		subscriptions: map[string]*subscription{},
 		unsubscribing: map[string]*subscriptionCleanup{},
