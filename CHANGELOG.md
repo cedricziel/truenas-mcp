@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.0](https://github.com/cedricziel/truenas-mcp/compare/v0.4.2...v0.5.0) (2026-09-26)
+
+
+### Features
+
+* add OAuth 2.1 authorization with Dynamic Client Registration ([#33](https://github.com/cedricziel/truenas-mcp/issues/33)) ([a081ad6](https://github.com/cedricziel/truenas-mcp/commit/a081ad66893669b49ef9189584e392bf3b3ba03d))
+* **filesystem:** read a file's text ([#43](https://github.com/cedricziel/truenas-mcp/issues/43)) ([63511b2](https://github.com/cedricziel/truenas-mcp/commit/63511b2b29b10c7b4413ed0525b990a1b73cee5d))
+* MCP Apps inventory view and MCP Tasks over middleware jobs ([#35](https://github.com/cedricziel/truenas-mcp/issues/35)) ([06957c1](https://github.com/cedricziel/truenas-mcp/commit/06957c16b3ecf265c3ea8bdad492b27da07e4826))
+
+
+### Bug Fixes
+
+* drop unused test helpers flagged by lint ([#36](https://github.com/cedricziel/truenas-mcp/issues/36)) ([8d24e24](https://github.com/cedricziel/truenas-mcp/commit/8d24e245b38fbfa1658b391fc68877f528bf70b1))
+* **oauth:** allow the plaintext override behind a reverse proxy ([#34](https://github.com/cedricziel/truenas-mcp/issues/34)) ([ecd14c9](https://github.com/cedricziel/truenas-mcp/commit/ecd14c9ccf84a9d8936192f367c7c520ef0f4958))
+* surface why middleware calls fail ([#42](https://github.com/cedricziel/truenas-mcp/issues/42)) ([a4b2fec](https://github.com/cedricziel/truenas-mcp/commit/a4b2fec803901a92ea67d49ac15916959023d1ab))
+* **truenas:** report a download job that failed behind an empty 200 ([#44](https://github.com/cedricziel/truenas-mcp/issues/44)) ([d93cc4b](https://github.com/cedricziel/truenas-mcp/commit/d93cc4b367e595944e38d2620051e19a0393845e))
+
+
+### Build and Packaging
+
+* bump golang from 1.26-alpine to 1.27-alpine ([#31](https://github.com/cedricziel/truenas-mcp/issues/31)) ([5cee8cc](https://github.com/cedricziel/truenas-mcp/commit/5cee8cc90f31c3655c052204a398cdff153eeefe))
+
 ## [0.4.2](https://github.com/cedricziel/truenas-mcp/compare/v0.4.1...v0.4.2) (2026-08-11)
 
 
