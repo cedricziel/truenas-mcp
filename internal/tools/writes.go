@@ -43,6 +43,10 @@ type WriteOp struct {
 
 	// Options are additional boolean arguments the operation accepts.
 	Options []string
+
+	// Synchronous marks methods that finish within the call and answer with
+	// their result rather than a job id.
+	Synchronous bool
 }
 
 // AppWrites is the v1 mutation surface.
@@ -118,9 +122,10 @@ func SnapshotWrite() WriteOp {
 		Title: "Create a snapshot",
 		Description: "Create a ZFS snapshot of a dataset. Additive and cheap; " +
 			"take one before any risky change.",
-		Method:    "pool.snapshot.create",
-		TargetArg: "dataset",
-		Options:   []string{"snapshot_name"},
+		Method:      "pool.snapshot.create",
+		TargetArg:   "dataset",
+		Options:     []string{"snapshot_name"},
+		Synchronous: true,
 	}
 }
 

@@ -86,6 +86,12 @@ func TestWriteDescriptionsStateTheAsyncContract(t *testing.T) {
 			t.Errorf("%s is missing", w.Name)
 			continue
 		}
+		if w.Synchronous {
+			if strings.Contains(tool.Description, asyncContractNote) {
+				t.Errorf("%s finishes within the call but its description promises a job", w.Name)
+			}
+			continue
+		}
 		if !strings.Contains(tool.Description, asyncContractNote) {
 			t.Errorf("%s description doesn't state the async contract: %q", w.Name, tool.Description)
 		}
