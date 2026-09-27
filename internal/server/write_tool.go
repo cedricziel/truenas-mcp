@@ -80,15 +80,16 @@ type writeInput interface {
 	params(target string) []any
 }
 
-// JobStartedOutput is what a mutation returns. It never carries a result,
-// because the operation has not finished: it carries the identity needed to
-// watch it.
+// JobStartedOutput is what a mutation returns. A job-backed mutation has not
+// finished, so it carries the identity needed to watch it; a synchronous one
+// carries the target's answer instead.
 type JobStartedOutput struct {
-	JobID    int64  `json:"job_id" jsonschema:"the job just started on the target; the call does not wait for it to finish"`
+	JobID    int64  `json:"job_id,omitempty" jsonschema:"the job just started on the target; the call does not wait for it to finish"`
 	Method   string `json:"method" jsonschema:"the middleware method invoked"`
 	Target   string `json:"target" jsonschema:"the object acted upon"`
-	Resource string `json:"resource" jsonschema:"resource URI tracking this job"`
-	Note     string `json:"note" jsonschema:"how to follow the job to completion"`
+	Resource string `json:"resource,omitempty" jsonschema:"resource URI tracking this job"`
+	Result   any    `json:"result,omitempty" jsonschema:"the target's response, for an operation that finished within the call"`
+	Note     string `json:"note,omitempty" jsonschema:"how to follow the job to completion"`
 }
 
 // asyncContractNote is appended to every write tool's description. Composing
@@ -102,8 +103,11 @@ const asyncContractNote = "Starts an asynchronous job and returns its id " +
 	"immediately rather than a finished result; follow it with " +
 	"jobs(op=\"show\", job_id=...) to see it complete."
 
-func withAsyncContractNote(description string) string {
-	return description + " " + asyncContractNote
+func writeDescription(w tools.WriteOp) string {
+	if w.Synchronous {
+		return w.Description
+	}
+	return w.Description + " " + asyncContractNote
 }
 
 // registerWrites exposes the mutating tier. Each operation becomes its own
@@ -140,7 +144,7 @@ func registerWrite(srv *mcp.Server, w tools.WriteOp, session sessionFor) {
 func registerWriteOp[In writeInput](srv *mcp.Server, w tools.WriteOp, session sessionFor) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        w.Name,
-		Description: withAsyncContractNote(w.Description),
+		Description: writeDescription(w),
 		Annotations: writeAnnotations(w.Title, w.Destructive, w.Idempotent),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, JobStartedOutput, error) {
 		target := in.target()
@@ -163,6 +167,18 @@ func registerWriteOp[In writeInput](srv *mcp.Server, w tools.WriteOp, session se
 		// something that exists rather than a name that may be a typo.
 		if err := resolveTarget(ctx, s.Client(), w, target); err != nil {
 			return toolError(err.Error()), JobStartedOutput{}, nil
+		}
+
+		if w.Synchronous {
+			raw, err := s.Client().Call(ctx, w.Method, in.params(target)...)
+			if err != nil {
+				return nil, JobStartedOutput{}, err
+			}
+			var result any
+			if err := json.Unmarshal(raw, &result); err != nil {
+				result = string(raw)
+			}
+			return nil, JobStartedOutput{Method: w.Method, Target: target, Result: result}, nil
 		}
 
 		jobID, err := s.Client().CallJob(ctx, w.Method, in.params(target)...)
