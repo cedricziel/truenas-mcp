@@ -104,8 +104,8 @@ func TestServeStdioSessionToolReachesProvider(t *testing.T) {
 	}
 
 	select {
-	case <-errc:
-		t.Fatal("serveStdio returned before the client closed the connection")
+	case err := <-errc:
+		t.Fatalf("serveStdio returned before the client closed the connection (err: %v)", err)
 	default:
 	}
 }
