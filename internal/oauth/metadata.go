@@ -25,14 +25,16 @@ type protectedResourceMetadata struct {
 
 // authorizationServerMetadata is RFC 8414's document.
 type authorizationServerMetadata struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	Issuer                                     string   `json:"issuer"`
+	AuthorizationEndpoint                      string   `json:"authorization_endpoint"`
+	TokenEndpoint                              string   `json:"token_endpoint"`
+	RegistrationEndpoint                       string   `json:"registration_endpoint"`
+	ResponseTypesSupported                     []string `json:"response_types_supported"`
+	GrantTypesSupported                        []string `json:"grant_types_supported"`
+	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported"`
+	TokenEndpointAuthMethodsSupported          []string `json:"token_endpoint_auth_methods_supported"`
+	ClientIDMetadataDocumentSupported          bool     `json:"client_id_metadata_document_supported"`
+	AuthorizationResponseIssParameterSupported bool     `json:"authorization_response_iss_parameter_supported"`
 }
 
 func (h *Handler) issuerBase() string {
@@ -68,14 +70,16 @@ func (h *Handler) handleAuthorizationServerMetadata(w http.ResponseWriter, _ *ht
 	}
 
 	writeJSON(w, http.StatusOK, authorizationServerMetadata{
-		Issuer:                            base,
-		AuthorizationEndpoint:             base + AuthorizePath,
-		TokenEndpoint:                     base + TokenPath,
-		RegistrationEndpoint:              base + RegisterPath,
-		ResponseTypesSupported:            []string{"code"},
-		GrantTypesSupported:               grantTypes,
-		CodeChallengeMethodsSupported:     []string{"S256"},
-		TokenEndpointAuthMethodsSupported: []string{"none"},
+		Issuer:                                     base,
+		AuthorizationEndpoint:                      base + AuthorizePath,
+		TokenEndpoint:                              base + TokenPath,
+		RegistrationEndpoint:                       base + RegisterPath,
+		ResponseTypesSupported:                     []string{"code"},
+		GrantTypesSupported:                        grantTypes,
+		CodeChallengeMethodsSupported:              []string{"S256"},
+		TokenEndpointAuthMethodsSupported:          []string{"none"},
+		ClientIDMetadataDocumentSupported:          true,
+		AuthorizationResponseIssParameterSupported: true,
 	})
 }
 

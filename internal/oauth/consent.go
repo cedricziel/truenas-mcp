@@ -29,7 +29,8 @@ button { margin-top: 1.5rem; padding: 0.6rem 1.2rem; font-size: 1rem; }
 <h1>Connect to truenas-mcp</h1>
 <p class="client">{{.ClientName}} is requesting access to a TrueNAS instance through your own credential. Nothing is granted until you submit a TrueNAS API key below.</p>
 <p class="destination">Access will be delivered to:<br><code>{{.RedirectURI}}</code></p>
-<p class="client">Only continue if you recognize this application and destination. Anyone can register a client with any name -- the destination above is the only thing this page can verify.</p>
+{{if .ClientIDURL}}<p class="destination">Application identity:<br><code>{{.ClientIDURL}}</code></p>{{end}}
+<p class="client">Only continue if you recognize this application and destination. Application names are supplied by clients and are not verified.</p>
 {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 <form method="post" action="{{.Action}}">
 <input type="hidden" name="response_type" value="{{.ResponseType}}">
@@ -53,6 +54,7 @@ type consentView struct {
 	ResponseType        string
 	ClientID            string
 	ClientName          string
+	ClientIDURL         string
 	RedirectURI         string
 	State               string
 	CodeChallenge       string
@@ -66,6 +68,10 @@ func renderConsentForm(w http.ResponseWriter, req authorizeRequest, username, er
 	if name == "" {
 		name = "This application"
 	}
+	clientIDURL := ""
+	if _, err := validateClientMetadataURL(req.ClientID); err == nil {
+		clientIDURL = req.ClientID
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = consentTemplate.Execute(w, consentView{
@@ -73,6 +79,7 @@ func renderConsentForm(w http.ResponseWriter, req authorizeRequest, username, er
 		ResponseType:        req.ResponseType,
 		ClientID:            req.ClientID,
 		ClientName:          name,
+		ClientIDURL:         clientIDURL,
 		RedirectURI:         req.RedirectURI,
 		State:               req.State,
 		CodeChallenge:       req.CodeChallenge,

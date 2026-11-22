@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,13 +21,7 @@ type authorizeRequest struct {
 	ClientMeta          ClientMetadata
 }
 
-// parseAuthorizeRequest validates values against the requirements every
-// authorization request must meet before the consent form can be trusted to
-// render: a client_id that decodes and verifies, a redirect_uri registered
-// for it, and an S256 PKCE challenge. Run identically for the initial GET
-// and the consent form's POST, since a POST's hidden fields are exactly as
-// untrusted as a GET's query parameters.
-func (h *Handler) parseAuthorizeRequest(values url.Values) (authorizeRequest, string) {
+func (h *Handler) parseAuthorizeRequest(ctx context.Context, values url.Values) (authorizeRequest, string) {
 	req := authorizeRequest{
 		ResponseType:        values.Get("response_type"),
 		ClientID:            values.Get("client_id"),
@@ -43,9 +38,9 @@ func (h *Handler) parseAuthorizeRequest(values url.Values) (authorizeRequest, st
 		return req, "client_id is required"
 	}
 
-	meta, err := DecodeClientID(h.cfg.Keys, req.ClientID)
+	meta, err := h.clientMetadata(ctx, req.ClientID)
 	if err != nil {
-		return req, "client_id is not recognized; register a client first"
+		return req, "client_id is not recognized or its metadata is unavailable or invalid"
 	}
 	req.ClientMeta = meta
 
@@ -64,7 +59,7 @@ func (h *Handler) parseAuthorizeRequest(values url.Values) (authorizeRequest, st
 }
 
 func (h *Handler) handleAuthorizeGet(w http.ResponseWriter, r *http.Request) {
-	req, problem := h.parseAuthorizeRequest(r.URL.Query())
+	req, problem := h.parseAuthorizeRequest(r.Context(), r.URL.Query())
 	if problem != "" {
 		writeOAuthProblem(w, http.StatusBadRequest, problem)
 		return
@@ -78,7 +73,7 @@ func (h *Handler) handleAuthorizePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, problem := h.parseAuthorizeRequest(r.PostForm)
+	req, problem := h.parseAuthorizeRequest(r.Context(), r.PostForm)
 	if problem != "" {
 		writeOAuthProblem(w, http.StatusBadRequest, problem)
 		return
@@ -117,10 +112,21 @@ func (h *Handler) handleAuthorizePost(w http.ResponseWriter, r *http.Request) {
 	}
 	q := redirect.Query()
 	q.Set("code", code)
+	q.Set("iss", h.issuerBase())
 	if req.State != "" {
 		q.Set("state", req.State)
 	}
 	redirect.RawQuery = q.Encode()
 
 	http.Redirect(w, r, redirect.String(), http.StatusFound)
+}
+
+func (h *Handler) clientMetadata(ctx context.Context, clientID string) (ClientMetadata, error) {
+	if strings.HasPrefix(clientID, ClientIDPrefix) {
+		return DecodeClientID(h.cfg.Keys, clientID)
+	}
+	if clientID == h.issuerBase() || clientID == h.ResourceURL() {
+		return ClientMetadata{}, ErrInvalidToken
+	}
+	return h.clients.fetch(ctx, clientID)
 }
