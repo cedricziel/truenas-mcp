@@ -308,7 +308,7 @@ download or upload pipe.
 `apps(op="config", name="myapp", fields=["auth"])` returns only the named
 top-level configuration keys. Alternatively, `exclude_fields=["ix_context"]`
 omits metadata. These options are mutually exclusive with each other and
-`full=true`. Unknown keys return an error. A response with omitted fields sets
+`full=true`. Empty selectors and unknown keys return an error. A response with omitted fields sets
 `projected: true`; omit both selectors to retrieve the whole object. Field
 selection reduces the response, but a selected field can still be large.
 

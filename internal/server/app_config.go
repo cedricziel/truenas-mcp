@@ -13,7 +13,10 @@ func validateReadSelection(concern string, in DispatchInput) error {
 	if in.Offset != nil && (concern != "filesystem" || in.Op != "read") {
 		return fmt.Errorf("offset applies only to filesystem read")
 	}
-	selected := len(in.Fields) > 0 || len(in.ExcludeFields) > 0
+	if in.Fields != nil && len(in.Fields) == 0 || in.ExcludeFields != nil && len(in.ExcludeFields) == 0 {
+		return fmt.Errorf("fields and exclude_fields must be nonempty when supplied")
+	}
+	selected := in.Fields != nil || in.ExcludeFields != nil
 	if selected && (concern != "apps" || in.Op != "config") {
 		return fmt.Errorf("fields and exclude_fields apply only to apps config")
 	}

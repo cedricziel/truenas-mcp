@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -61,6 +62,10 @@ func TestAppConfigExcludesMetadataWithoutChangingRevision(t *testing.T) {
 func TestAppConfigRejectsInvalidSelection(t *testing.T) {
 	for _, args := range []map[string]any{
 		{"op": "config", "name": "a", "fields": []string{"missing"}},
+		{"op": "config", "name": "a", "fields": []string{}},
+		{"op": "config", "name": "a", "exclude_fields": []string{}},
+		{"op": "show", "name": "a", "fields": []string{}},
+		{"op": "config", "name": "a", "fields": []string{}, "full": true},
 		{"op": "config", "name": "a", "fields": []string{"auth"}, "exclude_fields": []string{"auth"}},
 		{"op": "config", "name": "a", "full": true, "fields": []string{"auth"}},
 		{"op": "show", "name": "a", "fields": []string{"auth"}},
@@ -76,5 +81,31 @@ func TestAppConfigRejectsInvalidSelection(t *testing.T) {
 				t.Fatal("invalid selection accepted")
 			}
 		})
+	}
+}
+
+func TestAppConfigPreservesLargeIntegersOnWire(t *testing.T) {
+	target := newFakeTarget(t)
+	target.respond("app.config", map[string]any{"integer": json.Number("9007199254740993")})
+	srv := NewMCPServer(MCPConfig{Version: "t", Target: "nas"}, discoverySession(t, target))
+	client := newRawSession(t, srv)
+	raw, err := client.call("tools/call", map[string]any{"name": "apps", "arguments": map[string]any{"op": "config", "name": "a", "fields": []string{"integer"}}, "_meta": metaFor(false)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(result.StructuredContent), "9007199254740993") {
+		t.Fatalf("structured output lost precision: %s", raw)
+	}
+	if len(result.Content) != 1 || !strings.Contains(result.Content[0].Text, "9007199254740993") {
+		t.Fatalf("text output lost precision: %s", raw)
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cedricziel/truenas-mcp/internal/tools"
 	"github.com/cedricziel/truenas-mcp/internal/truenas"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -93,11 +94,7 @@ func (in DispatchInput) args() tools.Args {
 
 // registerConcern exposes one concern as a dispatch tool.
 func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        c.Name,
-		Description: c.ToolDescription(),
-		Annotations: readAnnotations(c.Title),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in DispatchInput) (*mcp.CallToolResult, DispatchOutput, error) {
+	handler := func(ctx context.Context, in DispatchInput) (*mcp.CallToolResult, DispatchOutput, error) {
 		if err := validateReadSelection(c.Name, in); err != nil {
 			return toolError(err.Error()), DispatchOutput{}, nil
 		}
@@ -154,6 +151,31 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 		}
 
 		return nil, out, nil
+	}
+
+	schema, err := jsonschema.For[DispatchOutput](nil)
+	if err != nil {
+		panic(fmt.Errorf("inferring read output schema: %w", err))
+	}
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:         c.Name,
+		Description:  c.ToolDescription(),
+		Annotations:  readAnnotations(c.Title),
+		OutputSchema: schema,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in DispatchInput) (*mcp.CallToolResult, any, error) {
+		result, out, err := handler(ctx, in)
+		if err != nil || result != nil || c.Name != "apps" || in.Op != "config" {
+			return result, out, err
+		}
+		// Bypass the SDK's float64 output re-marshalling while retaining the advertised schema.
+		raw, err := json.Marshal(out)
+		if err != nil {
+			return nil, nil, err
+		}
+		return &mcp.CallToolResult{
+			StructuredContent: json.RawMessage(raw),
+			Content:           []mcp.Content{&mcp.TextContent{Text: string(raw)}},
+		}, nil, nil
 	})
 }
 

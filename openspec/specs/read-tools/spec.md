@@ -298,8 +298,8 @@ Each request SHALL read the current file; pagination does not promise a snapshot
 
 `apps config` SHALL accept mutually exclusive `fields` and `exclude_fields`
 arrays naming top-level keys. These selectors SHALL be incompatible with
-`full=true` and unavailable on other operations. Unknown keys SHALL return an
-error. Selection SHALL preserve the selected values without string truncation.
+`full=true` and unavailable on other operations. Explicitly empty selectors and
+unknown keys SHALL return an error. Selection SHALL preserve the selected values without string truncation.
 Every config response SHALL carry a revision derived from the full config.
 
 #### Scenario: Inspect configuration without metadata
