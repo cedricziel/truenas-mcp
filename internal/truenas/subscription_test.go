@@ -222,6 +222,112 @@ func TestSubscriptionInterruptedByConnectionDrop(t *testing.T) {
 	}
 }
 
+func TestSubscriptionTargetTerminationClosesOnlyTheMatchingSource(t *testing.T) {
+	f := newFakeMiddleware(t)
+	f.handle("core.subscribe", func(json.RawMessage) (any, *rpcError) { return true, nil })
+	c := dial(t, f)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	first, err := c.Subscribe(ctx, "source.first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := c.Subscribe(context.Background(), "source.second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitUnsubscribed(t, f, "source.first", map[string]any{"error": 13, "errname": "EACCES", "reason": "source permission revoked", "trace": nil, "extra": nil})
+	select {
+	case _, ok := <-first.Events:
+		if ok {
+			t.Fatal("terminated source delivered an event instead of closing")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("target termination left the source blocked")
+	}
+	var targetErr *CallError
+	if !errors.As(first.Err(), &targetErr) || targetErr.Code != 13 || targetErr.Reason != "source permission revoked" || !errors.Is(first.Err(), ErrUnauthorized) {
+		t.Fatalf("terminal error = %v, want target EACCES refusal", first.Err())
+	}
+	cancel()
+	if err := f.emit("source.second", map[string]string{"value": "still live"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := receiveEvent(t, second.Events); string(got) != `{"value":"still live"}` || second.Err() != nil {
+		t.Fatalf("unrelated source was changed: event=%s error=%v", got, second.Err())
+	}
+	if got := f.requestCount("core.unsubscribe"); got != 0 {
+		t.Fatalf("target termination caused %d redundant unsubscribe calls", got)
+	}
+}
+
+func TestSubscriptionTargetTerminationWithoutErrorReleasesTheSource(t *testing.T) {
+	f := newFakeMiddleware(t)
+	f.handle("core.subscribe", func(json.RawMessage) (any, *rpcError) { return true, nil })
+	c := dial(t, f)
+	subscription, err := c.Subscribe(context.Background(), "source.logs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitUnsubscribed(t, f, "source.logs", nil)
+	select {
+	case _, ok := <-subscription.Events:
+		if ok {
+			t.Fatal("terminated source delivered an event instead of closing")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("target termination without an error left the source blocked")
+	}
+	if !errors.Is(subscription.Err(), ErrInterrupted) {
+		t.Fatalf("terminal error = %v, want ErrInterrupted", subscription.Err())
+	}
+	replacement, err := c.Subscribe(context.Background(), "source.logs")
+	if err != nil {
+		t.Fatalf("terminated source was not released: %v", err)
+	}
+	if err := f.emit("source.logs", map[string]string{"value": "replacement"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := receiveEvent(t, replacement.Events); string(got) != `{"value":"replacement"}` {
+		t.Fatalf("replacement event = %s", got)
+	}
+	if got := f.requestCount("core.unsubscribe"); got != 0 {
+		t.Fatalf("target termination caused %d redundant unsubscribe calls", got)
+	}
+}
+
+func TestSubscriptionUnknownTargetTerminationDoesNotAffectOtherSources(t *testing.T) {
+	f := newFakeMiddleware(t)
+	f.handle("core.subscribe", func(json.RawMessage) (any, *rpcError) { return true, nil })
+	c := dial(t, f)
+	subscription, err := c.Subscribe(context.Background(), "source.logs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitUnsubscribed(t, f, "unknown", nil)
+	if err := f.emit("source.logs", map[string]string{"value": "still live"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := receiveEvent(t, subscription.Events); string(got) != `{"value":"still live"}` || subscription.Err() != nil {
+		t.Fatalf("unknown source termination affected live source: event=%s error=%v", got, subscription.Err())
+	}
+}
+
+func emitUnsubscribed(t *testing.T, target *fakeMiddleware, source string, terminalError any) {
+	t.Helper()
+	target.mu.Lock()
+	conn := target.conn
+	target.mu.Unlock()
+	target.writeMu.Lock()
+	defer target.writeMu.Unlock()
+	if err := conn.WriteJSON(map[string]any{
+		"jsonrpc": "2.0", "method": "notify_unsubscribed",
+		"params": map[string]any{"collection": source, "error": terminalError},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func receiveEvent(t *testing.T, events <-chan json.RawMessage) json.RawMessage {
 	t.Helper()
 	select {
