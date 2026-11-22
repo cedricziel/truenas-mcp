@@ -351,7 +351,7 @@ Off by default. Set `TRUENAS_MCP_ENABLE_WRITES=true` to expose them.
 | Tool                | Effect                           | Annotated               |
 | ------------------- | -------------------------------- | ----------------------- |
 | `app_pull_images`   | pull latest images and redeploy  | destructive             |
-| `app_update_config` | merge selected config changes   | destructive             |
+| `app_update_config` | merge selected config changes    | destructive             |
 | `app_redeploy`      | redeploy without pulling         | destructive             |
 | `app_stop`          | stop a running app               | destructive, idempotent |
 | `app_upgrade`       | upgrade to a newer version       | destructive             |
@@ -482,6 +482,27 @@ The registry lives in `internal/apps`; adding an app is one entry there plus
 the tool it names. Its Go tests hold every entry to the extension's
 conventions, and `make test-apps` runs the views themselves against a fake
 host in a real browser.
+
+### Diagnostic prompts and completion
+
+Clients that expose MCP prompts can select a read-only diagnostic workflow:
+
+| Prompt            | Arguments            | Evidence                                                 |
+| ----------------- | -------------------- | -------------------------------------------------------- |
+| `diagnose_pool`   | Required `pool` name | Pool health, datasets, alerts, recent jobs               |
+| `investigate_app` | Required `app` name  | App state, containers, bounded logs, alerts, recent jobs |
+| `review_capacity` | Optional `pool` name | Pool and dataset usage, quotas, reservations, snapshots  |
+
+Retrieving a prompt returns instructions without opening a TrueNAS connection
+or running tools. The client chooses whether to execute the proposed reads.
+Plans disclose missing or truncated evidence and keep proposed repairs separate.
+
+MCP argument completion suggests pool and app names for these prompts and job
+IDs for `truenas://job/{id}`. Suggestions use the caller's credential and contain
+at most 50 matches. Job suggestions search the latest 101 jobs, so an older job
+may still exist even when completion does not show it. A bounded query sets
+`hasMore` and omits an exact total. Completion applies to prompts and resource
+templates, not general tool arguments.
 
 ### MCP Tasks
 
