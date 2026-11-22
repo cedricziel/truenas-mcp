@@ -124,14 +124,25 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 	options := &mcp.ServerOptions{
 		Capabilities: capabilities,
 		Instructions: serverInstructions,
+		SetCacheable: func(_ context.Context, _ mcp.Request, cache *mcp.Cacheable) {
+			cache.CacheScope = "private"
+			cache.TTLMs = 0
+		},
 	}
+	var subscriptions *resourceSubscriptions
 	if session != nil {
 		options.CompletionHandler = workflowCompletion(session)
+		subscriptions = newResourceSubscriptions(session)
+		options.SubscribeHandler = subscriptions.subscribe
+		options.UnsubscribeHandler = subscriptions.unsubscribe
 	}
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "truenas-mcp",
 		Version: cfg.Version,
 	}, options)
+	if subscriptions != nil {
+		subscriptions.setServer(srv)
+	}
 
 	registerResources(srv, session)
 	registerWorkflows(srv, session)
@@ -235,9 +246,7 @@ func NewMCPHandler(cfg MCPConfig) http.Handler {
 	// Without a session manager the server exposes only tools that need no
 	// middleware connection. Used by tests of the tool surface itself.
 	if cfg.Sessions == nil {
-		return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
-			return NewMCPServer(cfg, nil)
-		}, nil)
+		return newMCPHTTPTransport(NewMCPServer(cfg, nil))
 	}
 
 	return h
@@ -271,13 +280,25 @@ func (h *mcpHandler) handlerFor(apiKey string) http.Handler {
 	provider := NewSessionProvider(h.cfg.Sessions, id, apiKey)
 
 	srv := NewMCPServer(h.cfg, provider)
-	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
-		return srv
-	}, nil)
+	handler := newMCPHTTPTransport(srv)
 
 	h.servers[id] = srv
 	h.http[id] = handler
 	return handler
+}
+
+func newMCPHTTPTransport(server *mcp.Server) http.Handler {
+	getServer := func(*http.Request) *mcp.Server { return server }
+	legacy := mcp.NewStreamableHTTPHandler(getServer, &mcp.StreamableHTTPOptions{SessionTimeout: 5 * time.Minute})
+	modern := mcp.NewStreamableHTTPHandler(getServer, &mcp.StreamableHTTPOptions{Stateless: true})
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// The SDK accepts modern HTTP only in stateless mode; legacy subscriptions need persistent sessions.
+		if req.Header.Get("Mcp-Protocol-Version") >= "2026-07-28" {
+			modern.ServeHTTP(w, req)
+			return
+		}
+		legacy.ServeHTTP(w, req)
+	})
 }
 
 func credentialID(apiKey string) string {

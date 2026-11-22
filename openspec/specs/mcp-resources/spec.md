@@ -70,3 +70,53 @@ The same underlying data MAY be reachable both as a resource and through a read 
 
 - **WHEN** the alert list is obtained through both its resource URI and the corresponding read operation
 - **THEN** both report the same alerts
+
+### Requirement: Notify subscribers when live resources change
+
+When a middleware session provider is configured, the server SHALL support resource subscriptions in both read-only and write-enabled configurations. MCP 2026-07-28 clients SHALL use `subscriptions/listen`; older clients SHALL retain `resources/subscribe` and `resources/unsubscribe` compatibility. Updates SHALL contain the changed resource URI so the client can read its current state.
+
+The supported URI and middleware event source mappings SHALL be `truenas://alerts` to `alert.list`, `truenas://pools` to `pool.query`, `truenas://apps` to `app.query`, and `truenas://job/{id}` to `core.get_jobs`. Job IDs SHALL be canonical positive decimal integers without a sign or leading zeroes. Static documentation, system health, and unknown URIs SHALL reject subscriptions. System health includes time-dependent values without a corresponding event source.
+
+#### Scenario: Subscribe to live state
+
+- **WHEN** a client subscribes to the pools resource and the target emits a `pool.query` event
+- **THEN** the client receives `notifications/resources/updated` for `truenas://pools`
+- **AND** a 2026-07-28 notification identifies the `subscriptions/listen` request in its subscription metadata
+
+#### Scenario: Job events stay scoped to the subscribed job
+
+- **WHEN** a client subscribes to `truenas://job/7` and the target emits an event for job 8
+- **THEN** that event does not notify the client about job 7
+- **AND** an event identifying job 7 does notify the client about job 7
+
+#### Scenario: Caller credentials restrict subscriptions
+
+- **WHEN** clients with different credentials subscribe to the same URI
+- **THEN** each upstream subscription uses that caller's authenticated middleware connection
+- **AND** events from one credential's connection do not notify sessions belonging to another credential
+- **AND** target-side subscription permission failures are returned to the requesting client
+
+#### Scenario: Subscriptions release upstream resources
+
+- **WHEN** the last subscriber to an event source unsubscribes, cancels its listen request, or closes its MCP session
+- **THEN** the upstream subscription is canceled
+- **AND** multiple subscribers sharing the same authenticated connection and event source retain their subscription until the last subscriber leaves
+- **AND** abandoned HTTP sessions expire after a bounded idle interval
+- **AND** legacy HTTP clients SHOULD send periodic keepalive pings to retain subscriptions because an open standalone SSE stream does not prevent idle expiry
+- **AND** an active modern listen POST prevents idle expiry until the listen request ends
+
+#### Scenario: Upstream connection is interrupted
+
+- **WHEN** the middleware event stream ends or its connection is interrupted
+- **THEN** the server releases the stream and stops forwarding its events
+- **AND** a modern listen request ends with an error describing the upstream failure
+- **AND** an affected legacy MCP session closes so the client reconnects
+- **AND** subscriptions do not replay events missed during the interruption
+- **AND** clients must read current state and establish a new subscription after the middleware connection is restored
+
+#### Scenario: Reject overlapping modern resource listeners
+
+- **WHEN** a listen request repeats a URI or overlaps an active resource listener on the same MCP session
+- **THEN** the server rejects the new request before changing existing subscriptions
+- **AND** the original listener continues receiving notifications with its original subscription metadata
+- **AND** direct legacy resource subscribe and unsubscribe requests on a modern session cannot replace or remove modern listeners

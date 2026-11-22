@@ -126,11 +126,13 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 	return c, nil
 }
 
-// collectionUpdateMethod is the fixed top-level method every event-source
-// notification arrives as. The subscribed collection name -- including any
+// collectionUpdateMethod is the fixed top-level method collection changes
+// arrive as. The subscribed collection name -- including any
 // argument suffix, e.g. `app.container_log_follow:{"app_name":...}` -- is
 // never the top-level method; it is nested in params.collection.
 const collectionUpdateMethod = "collection_update"
+
+const notifyUnsubscribedMethod = "notify_unsubscribed"
 
 // readLoop dispatches responses to whichever caller is waiting on their ID.
 // Matching by ID rather than by arrival order is what makes concurrent calls
@@ -155,6 +157,10 @@ func (c *Client) readLoop() {
 			if json.Unmarshal(resp.Params, &envelope) == nil && envelope.Collection != "" {
 				c.dispatchNotification(envelope.Collection, envelope.Fields)
 			}
+			continue
+		}
+		if resp.ID == 0 && resp.Method == notifyUnsubscribedMethod {
+			c.dispatchUnsubscribed(resp.Params)
 			continue
 		}
 		if resp.ID == 0 && resp.Method != "" {
@@ -197,7 +203,7 @@ func (c *Client) failPending(err error) {
 }
 
 // Subscription receives events from one middleware event source. Err reports
-// why Events closed, if it closed because the connection was interrupted.
+// why Events closed, including target termination and connection interruption.
 type Subscription struct {
 	Events <-chan json.RawMessage
 	sub    *subscription
@@ -314,6 +320,35 @@ func (c *Client) dispatchNotification(source string, params json.RawMessage) {
 		c.mu.Unlock()
 		c.unsubscribeAsync(source, cleanup)
 	}
+}
+
+func (c *Client) dispatchUnsubscribed(params json.RawMessage) {
+	var envelope struct {
+		Collection string          `json:"collection"`
+		Error      json.RawMessage `json:"error"`
+	}
+	if json.Unmarshal(params, &envelope) != nil || envelope.Collection == "" {
+		return
+	}
+	terminalError := fmt.Errorf("%w: event source %q ended on the target", ErrInterrupted, envelope.Collection)
+	if len(envelope.Error) > 0 && string(envelope.Error) != "null" {
+		var detail struct {
+			Code    int    `json:"error"`
+			Errname string `json:"errname"`
+			Reason  string `json:"reason"`
+		}
+		if json.Unmarshal(envelope.Error, &detail) == nil {
+			terminalError = &CallError{
+				Method: envelope.Collection, Code: detail.Code, Message: "event source terminated",
+				Errname: detail.Errname, Reason: detail.Reason, Data: envelope.Error,
+			}
+		}
+	}
+	c.mu.Lock()
+	if sub := c.subscriptions[envelope.Collection]; sub != nil {
+		c.unregisterSubscriptionLocked(envelope.Collection, sub, terminalError, false)
+	}
+	c.mu.Unlock()
 }
 
 func (c *Client) endSubscription(source string, sub *subscription, err error, unsubscribe bool) {

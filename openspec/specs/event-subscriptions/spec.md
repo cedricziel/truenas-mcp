@@ -71,3 +71,19 @@ than an empty result.
 
 - **WHEN** a subscription is opened with arguments the event source rejects
 - **THEN** the server returns the target's error distinctly from no events
+
+### Requirement: Honor target-side subscription termination
+
+The client SHALL handle `notify_unsubscribed` for the named collection by closing its event stream and releasing its local subscription. It SHALL preserve a supplied target error or report interruption when no error is supplied. It SHALL NOT send a redundant unsubscribe for a stream the target has already ended.
+
+#### Scenario: Target ends one source
+
+- **WHEN** the target sends `notify_unsubscribed` for an active collection
+- **THEN** that source's consumer receives its terminal error
+- **AND** other sources continue receiving events
+- **AND** the ended source can be subscribed again
+
+#### Scenario: Target names an unknown source
+
+- **WHEN** the target sends `notify_unsubscribed` for a collection with no active local subscription
+- **THEN** active subscriptions remain unchanged
