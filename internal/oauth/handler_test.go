@@ -803,3 +803,60 @@ func TestTokenEndpointRejectsUnsupportedGrant(t *testing.T) {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
 	}
 }
+
+func TestAuthorizationMetadataAdvertisesCIMDAndIssuerResponse(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{}, time.Hour)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, AuthorizationServerMetadataPath, nil))
+	var metadata map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata["client_id_metadata_document_supported"] != true || metadata["authorization_response_iss_parameter_supported"] != true {
+		t.Fatalf("missing modern client registration and issuer support: %v", metadata)
+	}
+	if metadata["registration_endpoint"] != "https://truenas-mcp.example.com/register" {
+		t.Fatalf("DCR compatibility endpoint disappeared: %v", metadata)
+	}
+}
+
+func TestLegacyAuthorizationResponseIdentifiesIssuer(t *testing.T) {
+	_, mux := newTestMux(t, fakeValidator{acceptedKey: "1-goodkey"}, time.Hour)
+	clientID := registerClient(t, mux, testRedirectURI)
+	_, challenge := pkcePair()
+	rec := doAuthorizePost(t, mux, url.Values{"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {testRedirectURI}, "code_challenge": {challenge}, "code_challenge_method": {"S256"}, "api_key": {"1-goodkey"}, "state": {"original-state"}})
+	location, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusFound || location.Query().Get("iss") != "https://truenas-mcp.example.com" || location.Query().Get("state") != "original-state" {
+		t.Fatalf("authorization response lacks issuer binding: status=%d location=%s", rec.Code, location)
+	}
+}
+
+func TestTokenEndpointChallengesOnlySuppliedAuthenticationScheme(t *testing.T) {
+	cases := []struct {
+		header    string
+		status    int
+		challenge string
+	}{
+		{"basic Y2xpZW50OnNlY3JldA==", http.StatusUnauthorized, `Basic realm="truenas-mcp"`},
+		{"Bearer unsupported", http.StatusUnauthorized, `Bearer realm="truenas-mcp"`},
+		{"CustomAuth unsupported", http.StatusUnauthorized, "CustomAuth"},
+		{"Bad:Scheme unsupported", http.StatusBadRequest, ""},
+		{"Basic", http.StatusBadRequest, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.header, func(t *testing.T) {
+			_, mux := newTestMux(t, fakeValidator{}, time.Hour)
+			req := httptest.NewRequest(http.MethodPost, TokenPath, strings.NewReader("grant_type=authorization_code"))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Authorization", tc.header)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.status || rec.Header().Get("WWW-Authenticate") != tc.challenge {
+				t.Fatalf("authentication rejection: status=%d challenge=%q", rec.Code, rec.Header().Get("WWW-Authenticate"))
+			}
+		})
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,28 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "request body must be application/x-www-form-urlencoded")
 		return
 	}
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		scheme, valid := tokenEndpointAuthenticationScheme(auth)
+		if !valid {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "malformed token endpoint authentication")
+			return
+		}
+		challenge := scheme
+		if scheme == "Basic" || scheme == "Bearer" {
+			challenge += ` realm="truenas-mcp"`
+		}
+		w.Header().Set("WWW-Authenticate", challenge)
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "this authorization server supports public clients without token endpoint authentication")
+		return
+	}
+	for _, name := range []string{"client_secret", "client_assertion", "client_assertion_type"} {
+		for _, value := range r.PostForm[name] {
+			if value != "" {
+				writeOAuthError(w, http.StatusBadRequest, "invalid_client", "this authorization server supports public clients without token endpoint authentication")
+				return
+			}
+		}
+	}
 
 	switch r.PostFormValue("grant_type") {
 	case "authorization_code":
@@ -30,6 +53,26 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type",
 			`grant_type must be "authorization_code" or "refresh_token"`)
 	}
+}
+
+func tokenEndpointAuthenticationScheme(header string) (string, bool) {
+	scheme, credentials, ok := strings.Cut(strings.TrimSpace(header), " ")
+	if !ok || scheme == "" || strings.TrimSpace(credentials) == "" {
+		return "", false
+	}
+	for _, character := range scheme {
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", character) {
+			continue
+		}
+		return "", false
+	}
+	if strings.EqualFold(scheme, "Basic") {
+		return "Basic", true
+	}
+	if strings.EqualFold(scheme, "Bearer") {
+		return "Bearer", true
+	}
+	return scheme, true
 }
 
 func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Request) {

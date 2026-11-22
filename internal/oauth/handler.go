@@ -44,13 +44,14 @@ type Config struct {
 // Dynamic Client Registration, the authorization/consent endpoint, and the
 // token endpoint.
 type Handler struct {
-	cfg   Config
-	codes *ReplayCache
+	cfg     Config
+	codes   *ReplayCache
+	clients *clientMetadataFetcher
 }
 
 // NewHandler builds a Handler from cfg.
 func NewHandler(cfg Config) *Handler {
-	return &Handler{cfg: cfg, codes: NewReplayCache()}
+	return &Handler{cfg: cfg, codes: NewReplayCache(), clients: newClientMetadataFetcher()}
 }
 
 // Mount registers every OAuth route on mux, so it can be served alongside

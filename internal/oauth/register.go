@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -95,9 +97,15 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 // close, since the match would just be matching against the attacker's own
 // registered value.
 func validateRedirectURIScheme(raw string) error {
-	parsed, err := url.ParseRequestURI(raw)
-	if err != nil || !parsed.IsAbs() {
+	parsed, err := url.Parse(raw)
+	if err != nil || !parsed.IsAbs() || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" || strings.Contains(raw, "#") {
 		return fmt.Errorf("redirect_uris must be absolute URIs, got: %s", raw)
+	}
+	if port := parsed.Port(); port != "" {
+		n, err := strconv.Atoi(port)
+		if err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("redirect_uri has an invalid port")
+		}
 	}
 
 	switch parsed.Scheme {

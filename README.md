@@ -201,11 +201,12 @@ The key may also be sent as `X-TrueNAS-API-Key`, for clients that cannot set an
 Clients that spawn the server rather than connect to one want
 [Serving over stdio](#serving-over-stdio) instead.
 
-### Connecting an OAuth client (Claude.ai and similar)
+### Connecting an OAuth client
 
-A hosted MCP client such as Claude.ai never holds a TrueNAS API key directly —
-it only speaks OAuth 2.1: discovery, Dynamic Client Registration (RFC 7591),
-and an authorization-code flow with PKCE. Set an issuer URL to turn that on:
+OAuth clients connect through discovery and an authorization-code flow with
+PKCE. Client ID Metadata Documents let a client identify itself with an HTTPS
+URL. Dynamic Client Registration remains available for older clients. Set an
+issuer URL to enable OAuth:
 
 ```
 docker run -p 8080:8080 \
@@ -222,9 +223,9 @@ at from the client's side (no trailing slash). `TRUENAS_MCP_OAUTH_ENCRYPTION_KEY
 seals every client registration, authorization code, and token this process
 issues; leaving it unset works, but a fresh key is generated on every restart
 and invalidates every outstanding one — set it explicitly for anything longer
-than a quick trial. Neither TrueNAS credentials nor a client/token database
-are stored anywhere: everything OAuth issues is self-contained, verified with
-this one key. See `openspec/changes/oauth-dcr-authorization/design.md` for why.
+than a quick trial. No client or token database is needed: issued credentials
+are self-contained and verified with this key. Valid client metadata documents
+are cached in memory for at most five minutes, subject to their cache headers.
 
 Point a client at `https://your-host/mcp` the same way you would for the raw
 API key above; it discovers everything else — the authorization server, where
@@ -242,14 +243,36 @@ the open internet unencrypted.
 The raw-API-key path above keeps working unchanged and side-by-side with
 OAuth — enabling OAuth adds a second way in, it does not replace the first.
 
+Client metadata URLs must use HTTPS, have a non-root path, and resolve only to
+public addresses. The server follows no redirects and accepts JSON documents up
+to 5 KiB within a five-second timeout. The document must identify its exact URL,
+name the client, and list its redirect URIs. Only public clients without shared
+secrets are supported. Token requests must omit authentication headers and
+nonempty `client_secret` or `client_assertion` parameters. For example:
+
+```json
+{
+  "client_id": "https://client.example/oauth/client.json",
+  "client_name": "NAS maintenance client",
+  "redirect_uris": ["https://client.example/oauth/callback"],
+  "token_endpoint_auth_method": "none"
+}
+```
+
+Redirects must match the document, except that native clients using
+HTTP callbacks on `127.0.0.1` or `[::1]` may choose an ephemeral callback port. Authorization
+codes remain bound to the actual requested redirect URI and PKCE challenge.
+Successful authorization redirects include the issuer in `iss`, as advertised
+by the authorization server's metadata.
+
 ## Current state
 
 Working:
 
-- Streamable HTTP transport, per-session credentials, `401` without one
-- OAuth 2.1 with Dynamic Client Registration, for clients (Claude.ai and
-  similar) that only speak OAuth — see
-  [Connecting an OAuth client](#connecting-an-oauth-client-claudeai-and-similar)
+- Modern stateless and legacy sessionful HTTP, caller credentials on each request,
+  and `401` without one
+- OAuth with Client ID Metadata Documents, legacy Dynamic Client Registration,
+  and PKCE. See [Connecting an OAuth client](#connecting-an-oauth-client)
 - Stdio transport under a single per-process credential, for clients that spawn
   the server rather than connect to one
 - JSON-RPC middleware client: concurrent calls on one connection, structured

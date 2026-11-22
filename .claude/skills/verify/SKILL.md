@@ -30,7 +30,9 @@ completion, and reads under the HTTP caller's credential. Subscription tests cov
 modern and legacy notifications, credential isolation, shared streams, cancellation,
 upstream termination, overlapping listens, and disconnect cleanup.
 HTTP protocol tests cover modern stateless discovery and subscriptions, legacy
-session compatibility, header validation, and private cache hints.
+session compatibility, header validation, and private cache hints. OAuth tests
+cover client metadata fetching and bounds, private-address and redirect refusal,
+DNS pinning, native callback ports, PKCE binding, and issuer response metadata.
 
 Do not use `test-integration` or build tag `integration` for this workflow:
 those tests contact a live TrueNAS target. Do not launch a service against user
