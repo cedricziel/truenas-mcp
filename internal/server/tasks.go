@@ -223,6 +223,8 @@ func clientDeclaresTasks(req mcp.Request) bool {
 // starts a job, so only that server carries the extension -- the same rule
 // that keeps a mutating tool off the tool list when the tier is disabled.
 func registerTasks(srv *mcp.Server, session sessionFor, registry *taskRegistry) {
+	// Add links before the outer middleware replaces tool results with tasks.
+	registerJobResourceLinks(srv)
 	srv.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			res, err := next(ctx, method, req)
@@ -402,7 +404,7 @@ func jobCompletedResult(entry taskEntry, job truenas.Job) *mcp.CallToolResult {
 	out := JobCompletedOutput{JobID: job.ID, Method: entry.Method, Target: entry.Target, State: job.State, Result: job.Result}
 	text, _ := json.Marshal(out)
 	return &mcp.CallToolResult{
-		Content:           []mcp.Content{&mcp.TextContent{Text: string(text)}},
+		Content:           []mcp.Content{&mcp.TextContent{Text: string(text)}, jobResourceLink(job.ID)},
 		StructuredContent: out,
 	}
 }

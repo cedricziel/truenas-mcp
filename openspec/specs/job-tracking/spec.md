@@ -62,6 +62,26 @@ Each job SHALL have a stable resource URI whose content reflects the job's curre
 - **WHEN** a job's resource URI is read
 - **THEN** the content reports the same state, progress, and outcome available through polling
 
+### Requirement: Link job results to their resource
+
+Successful job-starting tool results and completed MCP task results SHALL include an MCP `resource_link` to `truenas://job/{id}`. They SHALL preserve their structured output and JSON text fallback. Synchronous operations SHALL NOT gain a job link.
+
+#### Scenario: Tool starts a job
+
+- **WHEN** a dedicated write tool, configuration write, or discovered method starts a job
+- **THEN** its ordinary tool result includes a resource link with the job URI and `application/json` MIME type
+- **AND** the existing structured result and text fallback remain available
+
+#### Scenario: Task completes
+
+- **WHEN** a completed task returns its tool result
+- **THEN** that result includes the job resource link
+
+#### Scenario: Synchronous operation completes
+
+- **WHEN** a write completes without starting a job
+- **THEN** its result contains no job resource link
+
 ### Requirement: Push job updates where the client supports subscription
 
 The server SHALL map the target's job events onto MCP resource update notifications for subscribed job resources. This SHALL be additive to polling and SHALL NOT be required for job observation.
