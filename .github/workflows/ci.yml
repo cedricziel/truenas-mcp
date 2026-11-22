@@ -42,7 +42,7 @@ jobs:
   # cover the protocol surface; this exercises the views themselves against a
   # fake host in a real browser.
   apps:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: internal/apps/ui
