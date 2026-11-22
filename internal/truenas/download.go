@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,6 +26,16 @@ type Download struct {
 // single-use URL on the same host, valid for a few minutes and only from the
 // address that asked for it.
 func (c *Client) Download(ctx context.Context, method string, args []any, filename string, max int64) (Download, error) {
+	return c.DownloadRange(ctx, method, args, filename, 0, max)
+}
+
+// DownloadRange streams past offset bytes without retaining the prefix, then
+// reads up to max bytes. Truncated reports whether more bytes follow the page.
+// Negative offsets and limits are rejected.
+func (c *Client) DownloadRange(ctx context.Context, method string, args []any, filename string, offset, max int64) (Download, error) {
+	if offset < 0 || max < 0 || max == math.MaxInt64 {
+		return Download{}, fmt.Errorf("%s: invalid download offset or limit", method)
+	}
 	raw, err := c.Call(ctx, "core.download", method, args, filename, false)
 	if err != nil {
 		return Download{}, err
@@ -61,6 +72,18 @@ func (c *Client) Download(ctx context.Context, method string, args []any, filena
 			reason = resp.Status
 		}
 		return Download{}, fmt.Errorf("%s: target reported: %s", method, reason)
+	}
+
+	if offset > 0 {
+		if _, err := io.CopyN(io.Discard, resp.Body, offset); err != nil {
+			if err != io.EOF {
+				return Download{}, fmt.Errorf("%s: %w: skipping download prefix: %w", method, ErrInterrupted, err)
+			}
+			if err := c.awaitDownloadJob(ctx, method, jobID); err != nil {
+				return Download{}, err
+			}
+			return Download{}, nil
+		}
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, max+1))

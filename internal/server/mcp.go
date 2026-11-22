@@ -165,6 +165,7 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		if cfg.EnableWrites {
 			registerWrites(srv, session)
 			registerConfigWrites(srv, session)
+			registerAppConfigUpdate(srv, session)
 			registerTasks(srv, session, newTaskRegistry())
 		}
 

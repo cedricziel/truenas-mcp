@@ -288,12 +288,43 @@ Every method behind the read tools is
 verified against the target's own RBAC metadata to grant `READONLY_ADMIN`,
 so "this tool cannot mutate" is checked rather than asserted.
 
-The one exception is `filesystem read`. It returns a file's text, cut off at
-64 KiB and refusing binary files. It changes nothing, but the middleware's
+The one exception is `filesystem read`. It returns a UTF-8 text page and refuses
+binary content. `offset` is a byte offset, defaulting to zero. `limit` is the
+page size in bytes: omitted or zero uses 1024, and explicit sizes range from
+4 to 65536. Responses include `offset`, `bytes_read`, `eof`, and `next_offset`
+when more data exists, also marked with `truncated: true`. Continue using
+`next_offset`; pages can be shorter than the limit to preserve UTF-8 characters.
+The limit applies per page, so files larger than 64 KiB remain readable.
+Each request opens a fresh download and streams past the prefix. Pages are not
+a snapshot; restart the read if the file changes between calls. Smaller pages
+reduce context pressure, but host output limits still vary.
+
+File reads change nothing, but the middleware's
 `filesystem.get` requires `FULL_ADMIN`, so a read-only key gets a clear "not
 permitted". The file streams through `core.download`, which is why
 `call_method` refuses `filesystem.get` and every other method that needs a
 download or upload pipe.
+
+`apps(op="config", name="myapp", fields=["auth"])` returns only the named
+top-level configuration keys. Alternatively, `exclude_fields=["ix_context"]`
+omits metadata. These options are mutually exclusive with each other and
+`full=true`. Empty selectors and unknown keys return an error. A response with omitted fields sets
+`projected: true`; omit both selectors to retrieve the whole object. Field
+selection reduces the response, but a selected field can still be large.
+
+Every config response includes a `revision` covering the full configuration.
+With writes enabled, call `app_update_config(target="myapp", changes={...},
+expected_revision="...")` to change selected values without copying the full
+configuration through model context. The server reads the full config again,
+rejects a changed revision, merges the changes, and submits all values to
+`app.update`. Objects merge recursively; arrays, scalars, and null replace the
+specified value. Null does not delete a key, and an empty object preserves an
+existing object. Top-level `ix_context` edits are refused.
+
+The update returns a job ID, not a completion result. It can restart the app.
+The revision check detects stale reads but is not atomic with concurrent writers
+outside this call. A filtered config must never be passed to raw `app.update`
+as its complete `values` object.
 
 The `apps` operations `outdated_images`, `upgrade_summary`, and
 `rollback_versions` exist so a caller can decide _whether_ to act before the
@@ -320,6 +351,7 @@ Off by default. Set `TRUENAS_MCP_ENABLE_WRITES=true` to expose them.
 | Tool                | Effect                           | Annotated               |
 | ------------------- | -------------------------------- | ----------------------- |
 | `app_pull_images`   | pull latest images and redeploy  | destructive             |
+| `app_update_config` | merge selected config changes   | destructive             |
 | `app_redeploy`      | redeploy without pulling         | destructive             |
 | `app_stop`          | stop a running app               | destructive, idempotent |
 | `app_upgrade`       | upgrade to a newer version       | destructive             |
