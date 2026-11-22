@@ -24,7 +24,7 @@ The default Go tests start fake HTTP and WebSocket targets on ephemeral loopback
 ports with test credentials and cleanup hooks. They need local listener access.
 They cover file continuation beyond 64 KiB, UTF-8 boundaries, config projection,
 full-config revisions, partial updates preserving hidden fields and large integers,
-and write gating.
+write gating, and job resource links in ordinary tool results and completed tasks.
 
 Do not use `test-integration` or build tag `integration` for this workflow:
 those tests contact a live TrueNAS target. Do not launch a service against user
