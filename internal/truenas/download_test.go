@@ -111,3 +111,38 @@ func TestDownloadSurfacesARefusedCall(t *testing.T) {
 		t.Fatalf("want the target's refusal, got %v", err)
 	}
 }
+
+func TestDownloadRangeSkipsPrefixAndReturnsBoundedPage(t *testing.T) {
+	f := newFakeMiddleware(t)
+	serveDownload(t, f, http.StatusOK, strings.Repeat("a", 70*1024)+"tail")
+	c := dial(t, f)
+	got, err := c.DownloadRange(context.Background(), "filesystem.get", []any{"/big"}, "big", 70*1024, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got.Data) != "tail" || got.Truncated {
+		t.Fatalf("got %q truncated=%v, want tail at EOF", got.Data, got.Truncated)
+	}
+}
+
+func TestDownloadRangeReportsMoreAfterPage(t *testing.T) {
+	f := newFakeMiddleware(t)
+	serveDownload(t, f, http.StatusOK, "0123456789")
+	got, err := dial(t, f).DownloadRange(context.Background(), "filesystem.get", nil, "file", 3, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got.Data) != "3456" || !got.Truncated {
+		t.Fatalf("got %q truncated=%v", got.Data, got.Truncated)
+	}
+}
+
+func TestDownloadRangeBeyondEOFStillChecksFailedJob(t *testing.T) {
+	f := newFakeMiddleware(t)
+	serveDownload(t, f, http.StatusOK, "")
+	finishJob(f, "FAILED", "permission denied")
+	_, err := dial(t, f).DownloadRange(context.Background(), "filesystem.get", nil, "file", 100, 4)
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("want failed job error, got %v", err)
+	}
+}

@@ -200,3 +200,32 @@ Rollback SHALL be exposed whenever the write tier is enabled, so that no exposed
 
 - **WHEN** rollback is invoked for an app with no version to roll back to
 - **THEN** the server refuses the operation without starting a job
+
+### Requirement: Preserve omitted application configuration during partial updates
+
+The write tier SHALL expose `app_update_config` with a target app name,
+nonempty `changes` object, and `expected_revision` from `apps config`.
+The server SHALL fetch the complete config and compare its revision before
+merging changes. Objects SHALL merge recursively. Arrays, scalars, and null
+SHALL replace the specified value; null SHALL NOT delete a key. Empty objects
+SHALL preserve existing object fields. Top-level `ix_context` changes SHALL be
+refused. The complete merged object SHALL be submitted as `app.update` values.
+The tool SHALL be annotated destructive and SHALL return a job ID without
+returning the configuration. The revision check SHALL NOT claim atomicity
+against external concurrent writers.
+
+#### Scenario: Update after a filtered read
+
+- **WHEN** a caller supplies a current revision and changes to selected fields
+- **THEN** fields omitted from the read or changes remain present in the submitted config
+- **AND** the response identifies the asynchronous job to follow
+
+#### Scenario: Configuration changed after inspection
+
+- **WHEN** the supplied revision differs from the current full configuration
+- **THEN** the tool reports an error and does not invoke `app.update`
+
+#### Scenario: Write tier disabled
+
+- **WHEN** writes are disabled
+- **THEN** `app_update_config` is not registered

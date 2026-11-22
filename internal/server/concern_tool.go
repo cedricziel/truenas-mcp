@@ -28,6 +28,7 @@ type DispatchInput struct {
 	Pool      string `json:"pool,omitempty" jsonschema:"restrict results to this pool"`
 	Dataset   string `json:"dataset,omitempty" jsonschema:"restrict results to this dataset"`
 	Path      string `json:"path,omitempty" jsonschema:"a filesystem path, such as /mnt/tank/media"`
+	Offset    *int64 `json:"offset,omitempty" jsonschema:"byte offset for filesystem read; default 0; use next_offset to continue"`
 
 	// Category narrows a browse to entries carrying it. It is a query filter
 	// like Pool and Dataset above, not a response-shaping argument: an
@@ -35,15 +36,12 @@ type DispatchInput struct {
 	// same contract those two already keep.
 	Category string `json:"category,omitempty" jsonschema:"restrict results to this category; see catalog(op=\"categories\") for the vocabulary"`
 
-	// Limit bounds the response, the same way on every op: shape() applies it
-	// to any list-shaped result regardless of which op produced it, and
-	// middlewareParams never reads it. It is deliberately absent from args()
-	// below for the same reason Full is -- see that field's comment.
-	Limit int `json:"limit,omitempty" jsonschema:"maximum number of results to return"`
+	// File reads interpret Limit as bytes; other reads bound collection items.
+	Limit int `json:"limit,omitempty" jsonschema:"maximum number of results; filesystem read uses bytes (default 1024, range 4..65536)"`
 
-	// Full is the escape hatch for ops that declare a default field
-	// projection: it has no effect on ops that do not, and it never widens a
-	// projection, only bypasses it entirely.
+	Fields        []string `json:"fields,omitempty" jsonschema:"apps config: include only these top-level keys; mutually exclusive with exclude_fields and full"`
+	ExcludeFields []string `json:"exclude_fields,omitempty" jsonschema:"apps config: omit these top-level keys, for example ix_context; mutually exclusive with fields and full"`
+
 	Full bool `json:"full,omitempty" jsonschema:"return every field instead of the default subset, for operations that normally project down"`
 }
 
@@ -56,11 +54,9 @@ type DispatchOutput struct {
 	Truncated       bool   `json:"truncated,omitempty" jsonschema:"whether the result was cut short"`
 	Bound           string `json:"bound,omitempty" jsonschema:"the bound that ended an event-source collection"`
 	ContentWithheld bool   `json:"content_withheld,omitempty" jsonschema:"whether an entry exceeded the response byte bound and was omitted"`
-	// Projected mirrors Truncated's role but for fields rather than items: a
-	// result with dropped fields must not read as complete any more than a
-	// truncated list does. Pass full=true on the next call to get everything.
-	Projected bool `json:"projected,omitempty" jsonschema:"whether each item was reduced to a default subset of fields; pass full=true to get everything"`
-	Result    any  `json:"result" jsonschema:"the operation's result"`
+	Revision        string `json:"revision,omitempty" jsonschema:"SHA-256 revision of the full app config; pass as expected_revision to app_update_config"`
+	Projected       bool   `json:"projected,omitempty" jsonschema:"whether fields were omitted; for apps config omit fields and exclude_fields to retrieve everything; for default projections pass full=true"`
+	Result          any    `json:"result" jsonschema:"the operation's result"`
 }
 
 // defaultLimit bounds collection results. Middleware collections can be large
@@ -68,16 +64,7 @@ type DispatchOutput struct {
 // more useful than a complete one that cannot be read.
 const defaultLimit = 50
 
-// args builds the set Concern.Resolve validates an op against. Limit and Full
-// are both deliberately absent: Resolve exists to catch an argument that
-// selects or narrows the wrong thing -- pool on an op with no pool filter --
-// and neither of these does that. Both only ever reach shape(), which applies
-// them uniformly to whatever the op returned, so gating either per-op could
-// only produce a refusal for a response the server was about to shape
-// correctly anyway. That refusal is exactly the defect this comment guards
-// against: limit used to be threaded through here too, which meant an op had
-// to separately declare it in Args to accept it at all, and 40 of 43 ops
-// never did -- despite limit sitting right there on every concern's schema.
+// Response selectors are validated separately; Resolve checks middleware arguments.
 func (in DispatchInput) args() tools.Args {
 	a := tools.Args{}
 	if in.ID != "" {
@@ -111,6 +98,9 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 		Description: c.ToolDescription(),
 		Annotations: readAnnotations(c.Title),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in DispatchInput) (*mcp.CallToolResult, DispatchOutput, error) {
+		if err := validateReadSelection(c.Name, in); err != nil {
+			return toolError(err.Error()), DispatchOutput{}, nil
+		}
 		op, err := c.Resolve(in.Op, in.args())
 		if err != nil {
 			// A resolution failure is the caller's mistake, not the target's.
@@ -140,6 +130,9 @@ func registerConcern(srv *mcp.Server, c *tools.Concern, session sessionFor) {
 			return nil, DispatchOutput{}, err
 		}
 
+		if c.Name == "apps" && op.Name == "config" {
+			return appConfigResult(raw, in)
+		}
 		out := shape(in.Op, raw, in.Limit, op.Project, in.Full)
 
 		// An op that declares Options sent its own limit to the target as

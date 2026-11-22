@@ -174,8 +174,9 @@ func Apps() *Concern {
 			},
 			{
 				Name: "config",
-				Summary: "an app's current configuration; app.update expects this same object " +
-					"back in full as values, not a partial patch",
+				Summary: "an app's configuration and full-config revision; use fields or exclude_fields " +
+					"for top-level key selection, then app_update_config for partial changes; " +
+					"raw app.update requires the full values object, not a partial patch",
 				Method:   "app.config",
 				Args:     []string{"name"},
 				Required: []string{"name"},
@@ -419,7 +420,7 @@ func Filesystem() *Concern {
 			// every other op here, though it changes nothing.
 			{
 				Name:    "read",
-				Summary: "the text of one file, cut off at 64 KiB; needs a full-admin API key",
+				Summary: "a UTF-8 file page; limit is bytes (default 1024, range 4..65536); continue with next_offset until eof; needs a full-admin API key",
 				Args:    []string{"path"}, Required: []string{"path"},
 			},
 		},

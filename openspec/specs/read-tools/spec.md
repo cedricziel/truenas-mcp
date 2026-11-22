@@ -104,7 +104,10 @@ Reporting a total or a truncation flag requires the server to know the size of t
 
 ### Requirement: Response-shaping arguments apply uniformly across a concern's operations
 
-An argument that only bounds or reshapes what a response contains, rather than selecting or narrowing the middleware call, SHALL apply the same way to every operation in a concern. Such an argument SHALL NOT be declared per-operation, and SHALL NOT be refused by an operation that does not separately declare it.
+Except for the operation-specific selectors and file byte limits defined below, an argument that only bounds or reshapes what a response contains SHALL apply the same way to every operation in a concern. Such an argument SHALL NOT be declared per-operation, and SHALL NOT be refused by an operation that does not separately declare it.
+
+Explicit app-config field selection is operation-specific and SHALL be validated
+separately. File reads interpret the common limit as bytes, as specified below.
 
 This is distinct from an argument that selects or narrows the middleware call itself, such as an identifier or a filter: those remain specific to the operations that accept them, and supplying one to an operation that does not is still refused per the "Type arguments as a flat optional superset" requirement above.
 
@@ -263,3 +266,49 @@ per-caller position state across calls.
 
 - **WHEN** a caller invokes the operation a second time
 - **THEN** it receives the current tail rather than only new entries
+
+### Requirement: Read files in resumable UTF-8 pages
+
+`filesystem read` SHALL accept a nonnegative byte `offset` and a byte `limit`.
+Omitting either SHALL use offset zero and a 1024-byte limit. A zero limit SHALL
+also use the default. Nonzero limits SHALL range from 4 through 65536 bytes.
+This operation is an exception to collection-count limit semantics.
+Responses SHALL report `offset`, `bytes_read`, and `eof`, with `next_offset` and
+`truncated: true` when more bytes remain. Pages SHALL preserve UTF-8 boundaries.
+The server SHALL stream past the prefix without retaining it in memory.
+Each request SHALL read the current file; pagination does not promise a snapshot.
+
+#### Scenario: Continue beyond the former file limit
+
+- **WHEN** the caller supplies the preceding page's `next_offset`
+- **THEN** the next page starts at that byte, including offsets beyond 64 KiB
+- **AND** no UTF-8 character is split or replaced
+
+#### Scenario: Invalid page request
+
+- **WHEN** the offset is negative, inside a UTF-8 character, or the nonzero limit is outside the supported range
+- **THEN** the tool reports an error
+
+#### Scenario: End of file
+
+- **WHEN** the page reaches or starts beyond the end of the file
+- **THEN** the response sets `eof: true` and omits `next_offset`
+
+### Requirement: Select application configuration fields explicitly
+
+`apps config` SHALL accept mutually exclusive `fields` and `exclude_fields`
+arrays naming top-level keys. These selectors SHALL be incompatible with
+`full=true` and unavailable on other operations. Unknown keys SHALL return an
+error. Selection SHALL preserve the selected values without string truncation.
+Every config response SHALL carry a revision derived from the full config.
+
+#### Scenario: Inspect configuration without metadata
+
+- **WHEN** the caller excludes `ix_context`
+- **THEN** the response omits that key and reports `projected: true`
+- **AND** its revision is the same as the unfiltered configuration's revision
+
+#### Scenario: Read without selectors
+
+- **WHEN** the caller omits both selectors
+- **THEN** the response contains the complete configuration
