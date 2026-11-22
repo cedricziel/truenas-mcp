@@ -125,13 +125,20 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		Capabilities: capabilities,
 		Instructions: serverInstructions,
 	}
+	var subscriptions *resourceSubscriptions
 	if session != nil {
 		options.CompletionHandler = workflowCompletion(session)
+		subscriptions = newResourceSubscriptions(session)
+		options.SubscribeHandler = subscriptions.subscribe
+		options.UnsubscribeHandler = subscriptions.unsubscribe
 	}
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "truenas-mcp",
 		Version: cfg.Version,
 	}, options)
+	if subscriptions != nil {
+		subscriptions.setServer(srv)
+	}
 
 	registerResources(srv, session)
 	registerWorkflows(srv, session)
@@ -273,7 +280,7 @@ func (h *mcpHandler) handlerFor(apiKey string) http.Handler {
 	srv := NewMCPServer(h.cfg, provider)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return srv
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{SessionTimeout: 5 * time.Minute})
 
 	h.servers[id] = srv
 	h.http[id] = handler

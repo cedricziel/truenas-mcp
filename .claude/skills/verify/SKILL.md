@@ -9,7 +9,7 @@ Run from the repository root. Use `GOCACHE` and `GOMODCACHE` in writable
 scratch directories if default caches are unavailable.
 
 1. Run `gofmt -l` on changed Go files and `git diff --check`.
-2. Run `go vet ./...` and `go test ./...`.
+2. Run `go vet ./...`, `go test -race ./...`, and `golangci-lint run`.
 3. Build in a unique scratch directory with cleanup:
 
    ```sh
@@ -26,7 +26,9 @@ They cover file continuation beyond 64 KiB, UTF-8 boundaries, config projection,
 full-config revisions, partial updates preserving hidden fields and large integers,
 write gating, and job resource links in ordinary tool results and completed tasks.
 Workflow tests cover prompt plans, argument validation, bounded name and job
-completion, and reads under the HTTP caller's credential.
+completion, and reads under the HTTP caller's credential. Subscription tests cover
+modern and legacy notifications, credential isolation, shared streams, cancellation,
+upstream termination, overlapping listens, and disconnect cleanup.
 
 Do not use `test-integration` or build tag `integration` for this workflow:
 those tests contact a live TrueNAS target. Do not launch a service against user

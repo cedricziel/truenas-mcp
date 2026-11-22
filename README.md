@@ -452,6 +452,24 @@ the design — they teach the filter syntax and ZFS semantics once instead of
 repeating them in every tool description, where the tokens would be paid on
 every request. A test asserts tool descriptions do not restate them.
 
+Job-starting tool results and completed task results include an MCP resource
+link to the job, alongside their structured output and JSON text fallback.
+
+Clients can subscribe to alerts, pools, apps, and individual job resources.
+MCP 2026-07-28 clients use `subscriptions/listen`; older clients use
+`resources/subscribe` and `resources/unsubscribe`. Notifications identify the
+changed URI; read that resource to obtain current state. Health and static
+resources do not support subscriptions.
+
+Subscriptions use the caller's TrueNAS credential and share an upstream event
+stream only within that credential. Cancellation or session closure releases
+unused streams. An upstream failure ends modern listen requests with an error
+and closes affected legacy sessions. Reconnect, read current state, and subscribe
+again; missed events are not replayed. Overlapping modern listens for the same
+URI on one session are rejected. Idle HTTP sessions expire after five minutes
+without requests; legacy clients need periodic requests such as pings to retain
+subscriptions. An active modern listen request keeps its session alive.
+
 ### MCP Apps
 
 An [MCP App](https://github.com/modelcontextprotocol/ext-apps) is a tool whose
