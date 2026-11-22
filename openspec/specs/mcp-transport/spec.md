@@ -18,6 +18,35 @@ The server SHALL serve MCP over an HTTP transport on a configurable bind address
 - **WHEN** the operator configures a bind address and port
 - **THEN** the server listens on exactly that address and port
 
+### Requirement: Support modern and legacy HTTP protocol versions
+
+The endpoint SHALL support stateless MCP 2026-07-28 HTTP requests and retain sessionful transport for older clients. It SHALL advertise modern support through `server/discover`, validate required request headers against request metadata, and serve modern subscriptions through a long-lived POST response.
+
+#### Scenario: Modern HTTP client subscribes
+
+- **WHEN** a client declares protocol 2026-07-28 and requests a supported resource subscription
+- **THEN** the endpoint acknowledges the listen and sends matching notifications on that POST response
+- **AND** canceling the HTTP request releases its subscription
+
+#### Scenario: Legacy HTTP client subscribes
+
+- **WHEN** a client initializes with an older supported protocol version
+- **THEN** it can retain a session and subscribe through the legacy resource methods
+
+#### Scenario: Header and metadata disagree
+
+- **WHEN** a modern request's protocol header conflicts with its metadata
+- **THEN** the endpoint rejects the request
+
+### Requirement: Keep credential-dependent responses private
+
+Cacheable MCP responses SHALL declare `cacheScope` as `private` and `ttlMs` as zero. Shared caches SHALL NOT be invited to reuse responses across caller identities.
+
+#### Scenario: Read a caller's resource
+
+- **WHEN** a client reads a live resource or discovers server capabilities
+- **THEN** the response declares private cache scope and no freshness window
+
 ### Requirement: State the shape of the surface at initialize
 
 The server SHALL return instructions when a session is initialized, describing how the tool surface is organized and how to reach middleware methods that no tool names.

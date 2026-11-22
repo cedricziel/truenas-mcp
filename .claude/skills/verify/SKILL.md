@@ -29,6 +29,8 @@ Workflow tests cover prompt plans, argument validation, bounded name and job
 completion, and reads under the HTTP caller's credential. Subscription tests cover
 modern and legacy notifications, credential isolation, shared streams, cancellation,
 upstream termination, overlapping listens, and disconnect cleanup.
+HTTP protocol tests cover modern stateless discovery and subscriptions, legacy
+session compatibility, header validation, and private cache hints.
 
 Do not use `test-integration` or build tag `integration` for this workflow:
 those tests contact a live TrueNAS target. Do not launch a service against user

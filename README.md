@@ -90,6 +90,12 @@ it up on its own; it listens on a port, and the client connects to it by URL.
 For clients that spawn the server themselves, see
 [Serving over stdio](#serving-over-stdio) below.
 
+The HTTP endpoint supports stateless MCP 2026-07-28 requests and keeps sessionful
+transport for older clients. Modern clients use `server/discover` and declare
+their protocol version and capabilities on each request. Cacheable MCP responses
+are private with `ttlMs: 0`, so clients reread current state and do not share
+credential-dependent results through a public cache.
+
 ```bash
 TRUENAS_MCP_TARGET=nas.local \
 TRUENAS_MCP_LISTEN=127.0.0.1:8080 \
@@ -526,7 +532,7 @@ templates, not general tool arguments.
 
 Every mutating tool starts a middleware job and returns its id. The
 [Tasks extension](https://github.com/modelcontextprotocol/ext-tasks)
-(`io.modelcontextprotocol/tasks`, stable as of protocol 2026-07-28) is the
+(`io.modelcontextprotocol/tasks`, currently Beta and targeting core) is the
 protocol's own shape for exactly that, so a job is exposed as a task rather
 than through a second lifecycle.
 

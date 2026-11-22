@@ -16,8 +16,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// MCP Tasks (the io.modelcontextprotocol/tasks extension, stable as of the
-// 2026-07-28 protocol revision) is the protocol's own shape for what every
+// MCP Tasks (the beta io.modelcontextprotocol/tasks extension for protocol
+// 2026-07-28) is the protocol's own shape for what every
 // mutating tool here already does: hand back a handle and let the caller
 // poll. A TrueNAS job is a task in all but name, so this file maps one onto
 // the other rather than inventing a second lifecycle.
