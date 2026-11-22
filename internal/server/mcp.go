@@ -121,22 +121,20 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		capabilities.AddExtension(TasksExtensionID, nil)
 	}
 
+	options := &mcp.ServerOptions{
+		Capabilities: capabilities,
+		Instructions: serverInstructions,
+	}
+	if session != nil {
+		options.CompletionHandler = workflowCompletion(session)
+	}
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "truenas-mcp",
 		Version: cfg.Version,
-	}, &mcp.ServerOptions{
-		// Extensions are declared here; everything else -- tools, resources
-		// -- is inferred from what gets registered, exactly as before.
-		Capabilities: capabilities,
-		// Instructions do not vary with the configured tier. Saying "mutations
-		// are registered only when enabled" is true and useful in both
-		// postures; describing the surface differently depending on how the
-		// server was started would make the text something a reader has to
-		// distrust.
-		Instructions: serverInstructions,
-	})
+	}, options)
 
 	registerResources(srv, session)
+	registerWorkflows(srv, session)
 	registerApps(srv, session)
 
 	mcp.AddTool(srv, &mcp.Tool{
