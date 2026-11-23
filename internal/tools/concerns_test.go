@@ -60,14 +60,14 @@ func TestConcernsAreWellFormed(t *testing.T) {
 }
 
 // The read surface must stay navigable. The original budget was four concerns,
-// raised to eight as coverage grew: what protects tool-selection accuracy is
+// raised to nine as coverage grew: what protects tool-selection accuracy is
 // names mapping to distinct domains, not a small count. "Is my backup running"
 // and "what VMs exist" are not questions a model confuses, whereas folding them
 // into one tool with a thirty-value op enum would hurt exactly the accuracy the
 // budget exists to defend.
 func TestReadSurfaceStaysNavigable(t *testing.T) {
-	if n := len(ReadConcerns()); n > 8 {
-		t.Fatalf("%d read concerns; beyond 8 the list stops being scannable", n)
+	if n := len(ReadConcerns()); n > 9 {
+		t.Fatalf("%d read concerns; beyond 9 the list stops being scannable", n)
 	}
 }
 

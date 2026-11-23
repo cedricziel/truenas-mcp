@@ -439,7 +439,7 @@ func Filesystem() *Concern {
 // domain, not two operations on the same one.
 func ReadConcerns() []*Concern {
 	return []*Concern{
-		Storage(), System(), Apps(), Sharing(),
+		Storage(), System(), Apps(), Sharing(), ObjectStorage(),
 		Virtualization(), Backup(), Filesystem(), Catalog(),
 	}
 }
