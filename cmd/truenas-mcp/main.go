@@ -118,6 +118,7 @@ func runStdio(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		Version:      version,
 		Target:       cfg.Target,
 		EnableWrites: cfg.EnableWrites,
+		EnableExec:   cfg.EnableExec,
 	}, session, &mcp.StdioTransport{})
 
 	// ctx is only cancelled by the signal handler above (or its parent), so
@@ -172,6 +173,7 @@ func run(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		Version:                      version,
 		Target:                       cfg.Target,
 		EnableWrites:                 cfg.EnableWrites,
+		EnableExec:                   cfg.EnableExec,
 		Sessions:                     sessions,
 		OAuthKeys:                    oauthKeys,
 		ProtectedResourceMetadataURL: resourceMetadataURL,

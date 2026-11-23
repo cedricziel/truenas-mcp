@@ -79,6 +79,7 @@ type Config struct {
 
 	// EnableWrites exposes the mutating tool tier. Off by default.
 	EnableWrites bool
+	EnableExec   bool
 
 	// APIKey is the TrueNAS API key the process authenticates with in stdio
 	// mode. It has no meaning in HTTP mode -- see validate -- and is never
@@ -151,6 +152,7 @@ func Load(getenv func(string) string, mode Mode) (*Config, error) {
 		TargetInsecureSkipVerify: boolVar(getenv, "TRUENAS_MCP_TARGET_INSECURE"),
 		TargetAllowPlaintext:     boolVar(getenv, "TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT"),
 		EnableWrites:             boolVar(getenv, "TRUENAS_MCP_ENABLE_WRITES"),
+		EnableExec:               boolVar(getenv, "TRUENAS_MCP_ENABLE_EXEC"),
 		APIKey:                   strings.TrimSpace(getenv("TRUENAS_MCP_API_KEY")),
 		OAuthIssuer:              strings.TrimSpace(getenv("TRUENAS_MCP_OAUTH_ISSUER")),
 		OAuthEncryptionKey:       strings.TrimSpace(getenv("TRUENAS_MCP_OAUTH_ENCRYPTION_KEY")),
@@ -324,6 +326,9 @@ func (c *Config) collectWarnings() {
 	if c.TargetAllowPlaintext {
 		c.warnings = append(c.warnings,
 			"connecting to the target over plaintext: TrueNAS may revoke API keys it observes in the clear")
+	}
+	if c.EnableExec {
+		c.warnings = append(c.warnings, "container execution requested; effective only when writes are enabled; commands can modify mounted data")
 	}
 	if c.EnableWrites {
 		c.warnings = append(c.warnings,

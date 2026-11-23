@@ -23,6 +23,7 @@ type MCPConfig struct {
 	Version      string
 	Target       string
 	EnableWrites bool
+	EnableExec   bool
 
 	// Sessions opens middleware connections under a caller's own credential.
 	// Nil in tests that exercise only the tool surface.
@@ -172,6 +173,9 @@ func NewMCPServer(cfg MCPConfig, session sessionFor) *mcp.Server {
 		// The tool list is the policy: with the write tier disabled there is
 		// no mutating tool to call, not merely one that refuses.
 		if cfg.EnableWrites {
+			if cfg.EnableExec {
+				registerContainerExec(srv, session)
+			}
 			registerWrites(srv, session)
 			registerConfigWrites(srv, session)
 			registerAppConfigUpdate(srv, session)

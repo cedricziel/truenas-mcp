@@ -55,6 +55,9 @@ services:
       # with volume removal stay unreachable regardless of this setting.
       TRUENAS_MCP_ENABLE_WRITES: "true"
 
+      # Optional: shell commands in Apps containers, including mounted data.
+      # TRUENAS_MCP_ENABLE_EXEC: "true"
+
       # Uncomment to let OAuth clients (Claude.ai and similar) connect
       # without holding a TrueNAS API key directly -- see "Connecting an
       # OAuth client" in the README. TRUENAS_MCP_OAUTH_ISSUER must be the

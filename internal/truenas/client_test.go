@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func dial(t *testing.T, f *fakeMiddleware) *Client {
@@ -287,5 +288,22 @@ func TestContextCancellationAbortsCall(t *testing.T) {
 
 	if _, err := c.Call(ctx, "system.version"); err == nil {
 		t.Fatal("a cancelled context must abort the call")
+	}
+}
+
+func TestCallCancellationWhileWaitingForWriter(t *testing.T) {
+	c := dial(t, newFakeMiddleware(t))
+	c.writeGate <- struct{}{}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := c.Call(ctx, "auth.generate_token"); done <- err }()
+	if err := <-done; !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("got %v", err)
+	}
+	<-c.writeGate
+	// Cancellation before acquiring the writer must preserve the connection.
+	if err := c.Login(context.Background(), validAPIKey); err != nil {
+		t.Fatal(err)
 	}
 }

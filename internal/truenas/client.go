@@ -73,7 +73,7 @@ type Client struct {
 	httpBase *url.URL
 	http     *http.Client
 
-	writeMu sync.Mutex
+	writeGate chan struct{}
 
 	mu      sync.Mutex
 	nextID  uint64
@@ -119,6 +119,7 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 		httpBase:      httpBase,
 		http:          &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}},
 		pending:       map[uint64]chan rpcResponse{},
+		writeGate:     make(chan struct{}, 1),
 		subscriptions: map[string]*subscription{},
 		unsubscribing: map[string]*subscriptionCleanup{},
 	}
@@ -398,6 +399,9 @@ func (c *Client) unsubscribeAsync(source string, cleanup *subscriptionCleanup) {
 
 // Call invokes a middleware method and returns its raw result.
 func (c *Client) Call(ctx context.Context, method string, params ...any) (json.RawMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if params == nil {
 		params = []any{}
 	}
@@ -419,9 +423,30 @@ func (c *Client) Call(ctx context.Context, method string, params ...any) (json.R
 
 	req := rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: encoded}
 
-	c.writeMu.Lock()
-	err = c.conn.WriteJSON(req)
-	c.writeMu.Unlock()
+	select {
+	case c.writeGate <- struct{}{}:
+	case <-ctx.Done():
+		c.forget(id)
+		return nil, ctx.Err()
+	}
+	if err = ctx.Err(); err == nil {
+		// Closing interrupts a blocked write. Never reuse a partially written
+		// connection, and wait for the callback before releasing the writer.
+		done := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			_ = c.Close()
+			close(done)
+		})
+		err = c.conn.WriteJSON(req)
+		if !stop() {
+			<-done
+			err = ctx.Err()
+		}
+		if err != nil {
+			_ = c.Close()
+		}
+	}
+	<-c.writeGate
 	if err != nil {
 		c.forget(id)
 		return nil, fmt.Errorf("%s: %w: %w", method, ErrInterrupted, err)
