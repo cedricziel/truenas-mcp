@@ -63,7 +63,7 @@ func (c *Client) ContainerExec(ctx context.Context, app, container, command stri
 	if err != nil {
 		return result, fmt.Errorf("connecting to container shell failed")
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 	conn.SetReadLimit(128 * 1024)

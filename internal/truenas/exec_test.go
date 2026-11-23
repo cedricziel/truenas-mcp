@@ -27,7 +27,7 @@ func TestContainerExecProtocol(t *testing.T) {
 				if err != nil {
 					return
 				}
-				defer conn.Close()
+				defer func() { _ = conn.Close() }()
 				var greeting struct {
 					Token   string            `json:"token"`
 					Options map[string]string `json:"options"`
@@ -81,7 +81,7 @@ func TestContainerExecProtocol(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() { _ = client.Close() }()
 			timeout := time.Second
 			if scenario == "cancel" {
 				timeout = 20 * time.Millisecond
