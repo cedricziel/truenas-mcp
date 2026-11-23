@@ -656,3 +656,20 @@ MIT. See [LICENSE](LICENSE).
 The middleware client here is written rather than adapted from
 `truenas/truenas-mcp`, which is GPL-3.0 — that is what keeps this project's
 licensing choice open.
+
+### Native S3 object storage
+
+The `objectstorage` tool reads S3 service configuration, listener address choices,
+buckets, and access-key metadata. These operations require the experimental native S3 APIs, verified on
+TrueNAS 27.0.0-RC.1. The [published S3 API documentation](https://api.truenas.com/v28.0/api_methods_s3.html)
+describes the development version; use `describe_method` for the target
+release's schema. Releases without these methods cannot use these tools.
+
+With `TRUENAS_MCP_ENABLE_WRITES=true`, use `update_s3_config`,
+`create_s3_bucket`, `update_s3_bucket`, `delete_s3_bucket`,
+`create_s3_access_key`, `update_s3_access_key`, and `delete_s3_access_key`.
+Pass configuration fields in `config` and record identifiers in `id`.
+Use `describe_method` to inspect the target version's fields before writing.
+Bucket deletion deregisters the bucket and preserves its dataset and objects.
+Access-key creation and rotation return a sensitive secret. Rotation uses
+`config={"rotate":true}` and invalidates the previous secret.

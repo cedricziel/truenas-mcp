@@ -35,7 +35,7 @@ type ConfigWriteOp struct {
 
 // ConfigWrites is the share and permission configuration surface.
 func ConfigWrites() []ConfigWriteOp {
-	return []ConfigWriteOp{
+	return append(objectStorageWrites(), []ConfigWriteOp{
 		{
 			Name:  "create_smb_share",
 			Title: "Create an SMB share",
@@ -114,5 +114,5 @@ func ConfigWrites() []ConfigWriteOp {
 			Destructive: true,
 			NeedsConfig: true,
 		},
-	}
+	}...)
 }
