@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/cedricziel/truenas-mcp/compare/v0.5.0...v0.6.0) (2026-11-23)
+
+
+### Features
+
+* add opt-in bounded Apps container execution ([#54](https://github.com/cedricziel/truenas-mcp/issues/54)) ([41ed1b5](https://github.com/cedricziel/truenas-mcp/commit/41ed1b566096058a7fb89616514b5ffae6b9fa7f))
+
 ## [0.5.0](https://github.com/cedricziel/truenas-mcp/compare/v0.4.2...v0.5.0) (2026-11-22)
 
 
