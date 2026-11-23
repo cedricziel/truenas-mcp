@@ -160,6 +160,7 @@ is needed. Invalid configuration refuses to start rather than running degraded.
 | `TRUENAS_MCP_ALLOW_PLAINTEXT`                  | `false`          | Serve without TLS (see below)                                  |
 | `TRUENAS_MCP_TARGET_INSECURE`                  | `false`          | Accept the target's certificate unverified                     |
 | `TRUENAS_MCP_TARGET_ALLOW_PLAINTEXT`           | `false`          | Connect to the target without TLS                              |
+| `TRUENAS_MCP_ENABLE_EXEC` | `false` | Expose container commands when writes are also enabled |
 | `TRUENAS_MCP_ENABLE_WRITES`                    | `false`          | Expose mutating tools                                          |
 | `TRUENAS_MCP_API_KEY`                          | —                | Credential for `--stdio`; refused otherwise                    |
 | `TRUENAS_MCP_OAUTH_ISSUER`                     | —                | Enables OAuth; the server's own externally-reachable base URL  |
@@ -427,6 +428,28 @@ switchable; use the web interface.
 `apps(op="logs", name=...)` returns a bounded timestamped tail, not a live
 follow. When an app has multiple containers, first call `apps(op="containers",
 name=...)` and pass one returned ID as `container`.
+
+### Container commands
+
+Set both `TRUENAS_MCP_ENABLE_WRITES=true` and `TRUENAS_MCP_ENABLE_EXEC=true`
+to expose `container_exec`. Pass `app`, the exact `container` ID returned by
+`apps(op="containers", name=...)`, and a `command` for `/bin/sh`.
+`timeout_seconds` defaults to 30 (maximum 120); `output_limit` defaults to
+16384 bytes (maximum 65536). Commands must fit within 3500 bytes after
+POSIX shell quoting, to stay within the terminal input line limit.
+
+The tool opens TrueNAS's container webshell under the caller's credentials.
+The account needs the shell and app privileges required by the installed
+TrueNAS version (newer versions use Web Shell Access and `APPS_WRITE`;
+older versions may require broader privileges). The container must include
+`/bin/sh`. No host shell or system-container shell is exposed.
+
+Results contain combined terminal output, with possible terminal line-ending
+conversion, and `exit_code` when completion was observed. `incomplete` means
+completion is unknown. A timeout, cancellation, or output overflow closes the
+terminal but does **not** guarantee spawned processes stopped; inspect before
+retrying. Execution uses the container's default user and can modify mounted
+datasets. The RPC method denylist does not restrict shell command semantics.
 
 ### The discovery escape hatch
 

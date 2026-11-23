@@ -519,3 +519,19 @@ func TestStdioModeWarnsOnOAuthIssuer(t *testing.T) {
 		t.Fatalf("expected a warning naming TRUENAS_MCP_OAUTH_ISSUER, got: %v", cfg.Warnings())
 	}
 }
+
+func TestContainerExecOptIn(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		value := "false"
+		if enabled {
+			value = "true"
+		}
+		cfg, err := Load(env(validEnv(map[string]string{"TRUENAS_MCP_ENABLE_EXEC": value})), ModeHTTP)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.EnableExec != enabled || cfg.EnableWrites {
+			t.Fatalf("exec must not implicitly enable writes: %+v", cfg.EnableWrites)
+		}
+	}
+}
