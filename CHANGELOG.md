@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/cedricziel/truenas-mcp/compare/v0.6.0...v0.7.0) (2026-11-24)
+
+
+### Features
+
+* **storage:** add native S3 object storage management ([#56](https://github.com/cedricziel/truenas-mcp/issues/56)) ([136792b](https://github.com/cedricziel/truenas-mcp/commit/136792beae2ae5cb57780b59ac478971345c5844))
+
+
+### Bug Fixes
+
+* **apps:** send custom compose in app configuration updates ([#58](https://github.com/cedricziel/truenas-mcp/issues/58)) ([dd7236c](https://github.com/cedricziel/truenas-mcp/commit/dd7236cae97789b21deca289b83c8382319fa494))
+
 ## [0.6.0](https://github.com/cedricziel/truenas-mcp/compare/v0.5.0...v0.6.0) (2026-11-23)
 
 
