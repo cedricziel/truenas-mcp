@@ -13,6 +13,7 @@ func TestAppConfigUpdatePreservesCompleteConfig(t *testing.T) {
 	target := newFakeTarget(t)
 	config := map[string]any{"hidden": strings.Repeat("secret", 1000), "large_integer": json.Number("9007199254740993"), "nested": map[string]any{"keep": "sibling", "change": "before"}, "list": []any{"a", "b"}, "nullable": "before"}
 	target.respond("app.config", config)
+	target.respond("app.get_instance", map[string]any{"custom_app": false})
 	target.respond("app.update", 42)
 	client := discoveryClient(t, discoverySession(t, target), true)
 	read, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "apps", Arguments: map[string]any{"op": "config", "name": "demo", "fields": []string{"nested"}}})
@@ -77,6 +78,52 @@ func TestAppConfigUpdatePreservesCompleteConfig(t *testing.T) {
 	}
 	if strings.Contains(string(mustMarshalUpdateResult(t, result)), "secret") {
 		t.Fatal("response exposed configuration")
+	}
+}
+
+func TestAppConfigUpdateSendsFullCustomCompose(t *testing.T) {
+	target := newFakeTarget(t)
+	config := map[string]any{
+		"services": map[string]any{
+			"web": map[string]any{
+				"image":       "web:1",
+				"environment": map[string]any{"KEEP": "yes"},
+			},
+			"db": map[string]any{"image": "db:1"},
+		},
+		"volumes": map[string]any{"data": nil},
+	}
+	target.respond("app.config", config)
+	target.respond("app.get_instance", map[string]any{"custom_app": true})
+	target.respond("app.update", 42)
+	client := discoveryClient(t, discoverySession(t, target), true)
+
+	revision, err := configRevision(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "app_update_config",
+		Arguments: map[string]any{
+			"target": "demo", "expected_revision": revision,
+			"changes": map[string]any{"services": map[string]any{
+				"web": map[string]any{"environment": map[string]any{"NEW": "on"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("update failed: %v", result.Content)
+	}
+	raw, ok := target.lastParams("app.update")
+	if !ok {
+		t.Fatal("app.update was not called")
+	}
+	const want = `["demo",{"custom_compose_config":{"services":{"db":{"image":"db:1"},"web":{"environment":{"KEEP":"yes","NEW":"on"},"image":"web:1"}},"volumes":{"data":null}}}]`
+	if string(raw) != want {
+		t.Fatalf("app.update params = %s, want %s", raw, want)
 	}
 }
 

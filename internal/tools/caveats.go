@@ -25,7 +25,7 @@ package tools
 var methodCaveats = map[string]string{
 	"app.update": "Replaces the app's configuration; it is not a patch. Read the current " +
 		"config with apps(op=\"config\", name=...), apply your changes to that object, " +
-		"and pass the whole thing back as `values` -- fields you leave out are not preserved. " +
+		"and pass the whole object under `custom_compose_config` for custom apps or `values` for catalog apps. " +
 		"Prefer app_update_config with partial changes and the revision from apps config; " +
 		"it preserves omitted fields server-side. Never use a filtered config as a complete replacement.",
 }
