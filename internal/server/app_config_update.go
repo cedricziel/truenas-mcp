@@ -56,8 +56,23 @@ func registerAppConfigUpdate(srv *mcp.Server, session sessionFor) {
 		if revision != in.ExpectedRevision {
 			return toolError("configuration revision changed; read apps(op=config) again before updating"), JobStartedOutput{}, nil
 		}
+		app, err := s.Client().Call(ctx, "app.get_instance", in.Target)
+		if err != nil {
+			return nil, JobStartedOutput{}, err
+		}
+		var instance struct {
+			CustomApp *bool `json:"custom_app"`
+		}
+		if err := json.Unmarshal(app, &instance); err != nil || instance.CustomApp == nil {
+			return toolError("app.get_instance must return a custom_app boolean"), JobStartedOutput{}, nil
+		}
+
+		field := "values"
+		if *instance.CustomApp {
+			field = "custom_compose_config"
+		}
 		mergeAppConfig(config, in.Changes)
-		jobID, err := s.Client().CallJob(ctx, "app.update", in.Target, map[string]any{"values": config})
+		jobID, err := s.Client().CallJob(ctx, "app.update", in.Target, map[string]any{field: config})
 		if err != nil {
 			return nil, JobStartedOutput{}, err
 		}
